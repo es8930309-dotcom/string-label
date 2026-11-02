@@ -39,6 +39,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body);
@@ -124,6 +125,21 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
 .hist-item .num { font-size: 20px; }
 .hist-item button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
 .empty { font-size: 13px; color: var(--muted); margin: 0; }
+.match { display: grid; gap: 6px; }
+.match .hint { font-size: 13px; }
+.pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.pill.doing { color: var(--warn); border-color: var(--warn); }
+.pill.ready { color: var(--ok); border-color: var(--ok); }
+.order { display: grid; gap: 8px; padding: 10px; border-radius: 10px; background: var(--chip); }
+.order-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.order-top .num { font-size: 20px; }
+.order-info { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.order-sub { font-size: 12px; color: var(--muted); }
+.order-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.order-actions button { font: inherit; font-size: 14px; font-weight: 700; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+.order-actions button.ghost { background: var(--surface); color: var(--accent); }
+.order-actions button:disabled { opacity: .5; }
+summary .pill { margin-left: 6px; }
 
 .bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
@@ -163,6 +179,7 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
   <form id="form" autocomplete="off">
     <div class="field">
       <input id="phone" maxlength="8" placeholder="手機末三碼/名字" aria-label="手機末三碼/名字" required>
+      <div id="custMatch" class="match" hidden></div>
     </div>
 
     <div class="field">
@@ -199,6 +216,14 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
       <input id="date" type="date">
     </div>
   </form>
+
+  <details id="ordersBox" hidden>
+    <summary>取拍清單 <span id="ordersCount" class="pill" hidden></span></summary>
+    <div class="panel">
+      <div class="head"><span class="hint" id="ordersHint"></span><button type="button" class="edit" id="ordersRefresh">重新整理</button></div>
+      <div id="orders" class="history"></div>
+    </div>
+  </details>
 
   <details>
     <summary>最近列印</summary>
@@ -245,6 +270,12 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
           <select id="preFmt"><option value="plain">10%</option><option value="plus">+10%</option></select>
         </div>
       </div>
+      <div class="field">
+        <span class="lbl">雲端紀錄（LINE 取拍系統）</span>
+        <input id="apiUrl" placeholder="Apps Script 網頁應用程式網址" aria-label="Apps Script 網址" inputmode="url">
+        <input id="apiKey" placeholder="店家密碼" aria-label="店家密碼" type="password">
+        <div class="head"><span class="hint" id="apiResult">填好後，列印時會自動建立穿線紀錄。</span><button type="button" class="chip" id="apiTest">測試連線</button></div>
+      </div>
       <label class="check"><input id="logoRight" type="checkbox"> LOGO 放右邊</label>
       <label class="check"><input id="rotate" type="checkbox"> 列印方向轉 180°（印出來顛倒時勾選）</label>
     </div>
@@ -279,6 +310,7 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
     strings: ["z61", "BG65", "BG65Ti", "BG66U", "BG80", "BG80P", "AB", "NBG95", "NBG99", "EX63", "EX65"],
     tensions: ["22", "23", "24", "25", "26", "27", "28", "30"],
     pres: ["5", "10", "15", "20"],
+    apiUrl: "", apiKey: "",
   }, store.get("cfg", {}));
   if (!Array.isArray(cfg.pres)) cfg.pres = ["5", "10", "15", "20"];
   if (cfg.preFmt !== "plus") cfg.preFmt = "plain";
@@ -291,6 +323,8 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
   let busy = false;
   let pre = "";          // selected pre-stretch %, "" = none
   const editing = {};    // which chip list is in edit mode
+  let selPhone = "";     // customer chosen for this label (full phone)
+  let matches = [];
   const lib = window.niimbluelib;
 
   // ---------- tension text ----------
@@ -517,6 +551,144 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
 
   function refreshChips() { Object.keys(groups).forEach(drawGroup); drawCross(); }
 
+  // ---------- cloud (Apps Script) ----------
+  const cloudOn = () => !!(cfg.apiUrl && cfg.apiKey);
+  async function api(action, data) {
+    const r = await fetch(cfg.apiUrl, {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(Object.assign({ key: cfg.apiKey, action }, data || {})),
+    });
+    let j;
+    try { j = await r.json(); } catch { throw new Error("網址不正確，或 Apps Script 沒有設定成「所有人」都能存取"); }
+    if (!j.ok) throw new Error(j.error || "雲端回應錯誤");
+    return j;
+  }
+  const mask = (p) => (p ? `${p.slice(0, 4)}-***-${p.slice(7)}` : "");
+
+  let lookupTimer = 0, lookupSeq = 0;
+  function scheduleLookup() {
+    clearTimeout(lookupTimer);
+    const q = $("phone").value.trim();
+    selPhone = ""; matches = [];
+    if (!cloudOn() || !q || (/^\d+$/.test(q) && q.length !== 3)) { drawMatches(); return; }
+    lookupTimer = setTimeout(async () => {
+      const seq = ++lookupSeq;
+      try {
+        const j = await api("lookup", { q });
+        if (seq !== lookupSeq) return;
+        matches = j.customers || [];
+        if (matches.length === 1) selPhone = matches[0].phone;
+      } catch (e) { matches = []; }
+      drawMatches();
+    }, 400);
+  }
+  function drawMatches() {
+    const box = $("custMatch"); box.innerHTML = "";
+    const q = $("phone").value.trim();
+    box.hidden = !cloudOn() || !q;
+    if (box.hidden) return;
+    if (!matches.length) {
+      box.append(el("span", { className: "hint", textContent: "找不到已綁定的客人。照樣可以列印，之後再通知。" }));
+      return;
+    }
+    box.append(el("span", { className: "hint", textContent: matches.length > 1 ? "有好幾位客人，請選一位：" : "客人：" }));
+    const row = el("div", { className: "chips" });
+    matches.forEach((c) => {
+      const b = el("button", { type: "button", className: "chip", textContent: `${c.name || "未命名"} ${mask(c.phone)}` });
+      b.setAttribute("aria-pressed", String(selPhone === c.phone));
+      b.onclick = () => { selPhone = selPhone === c.phone ? "" : c.phone; drawMatches(); };
+      row.append(b);
+    });
+    box.append(row);
+  }
+
+  // records that failed to upload are kept and retried
+  async function flushOutbox() {
+    if (!cloudOn()) return 0;
+    const box = store.get("outbox", []);
+    const left = [];
+    for (const item of box) {
+      try { await api("create", item); } catch (e) { left.push(item); }
+    }
+    store.set("outbox", left);
+    return left.length;
+  }
+  async function saveRecord(rec) {
+    if (!cloudOn()) return "";
+    const box = store.get("outbox", []); box.push(rec); store.set("outbox", box);
+    const left = await flushOutbox();
+    loadOrders();
+    return left ? `，但有 ${left} 筆紀錄還沒上傳到試算表（下次會自動重試）` : "，已建立穿線紀錄";
+  }
+
+  let ordersLoading = false;
+  async function loadOrders() {
+    $("ordersBox").hidden = !cloudOn();
+    if (!cloudOn() || ordersLoading) return;
+    ordersLoading = true; $("ordersHint").textContent = "讀取中…";
+    try {
+      const j = await api("list");
+      drawOrders(j.records || []);
+      const n = store.get("outbox", []).length;
+      $("ordersHint").textContent = n ? `有 ${n} 筆紀錄等待上傳` : "";
+    } catch (e) {
+      $("ordersHint").textContent = "讀取失敗：" + e.message;
+    } finally { ordersLoading = false; }
+  }
+  function drawOrders(list) {
+    const box = $("orders"); box.innerHTML = "";
+    const doing = list.filter((r) => r.status === "穿線中").length;
+    const cnt = $("ordersCount"); cnt.hidden = !list.length;
+    cnt.textContent = `${doing} 穿線中 · ${list.length - doing} 待取拍`;
+    if (!list.length) { box.append(el("p", { className: "empty", textContent: "目前沒有寄放的球拍。" })); return; }
+    list.forEach((r) => {
+      const card = el("div", { className: "order" });
+      const pill = el("span", { className: "pill " + (r.status === "穿線中" ? "doing" : "ready"), textContent: r.status });
+      card.append(el("div", { className: "order-top" },
+        el("span", { className: "num", textContent: r.name }), pill,
+        el("span", { className: "order-sub", textContent: r.customer ? `${r.customer} ${mask(r.phone)}` : (r.phone ? mask(r.phone) : "未對應客人") })));
+      card.append(el("div", { className: "order-info", textContent: [r.string, r.tension, fmtDate(r.date)].filter(Boolean).join(" · ") }));
+      if (r.status === "待取拍") card.append(el("div", { className: "order-sub", textContent: r.notified ? `已通知 ${r.notified}` : "沒有傳 LINE 通知" }));
+      const actions = el("div", { className: "order-actions" });
+      const note = el("div", { className: "order-sub" });
+      if (r.status === "穿線中") {
+        const b = el("button", { type: "button", textContent: "穿好了，通知客人" });
+        b.onclick = () => ready(r, b, note, actions);
+        actions.append(b);
+      } else {
+        const b = el("button", { type: "button", textContent: "已取拍" });
+        b.onclick = async () => {
+          b.disabled = true;
+          try { await api("pickup", { id: r.id }); setMsg(`${r.name} 已取拍`, "ok"); loadOrders(); }
+          catch (e) { b.disabled = false; note.textContent = "失敗：" + e.message; }
+        };
+        actions.append(b);
+      }
+      card.append(actions, note);
+      box.append(card);
+    });
+  }
+  async function ready(r, btn, note, actions, phone) {
+    btn.disabled = true; note.textContent = "處理中…";
+    try {
+      const j = await api("ready", { id: r.id, phone });
+      if (j.needChoice) {
+        note.textContent = "末三碼有好幾位客人，請選是哪一位：";
+        actions.innerHTML = "";
+        j.candidates.forEach((c) => {
+          const b = el("button", { type: "button", className: "ghost", textContent: `${c.name || "未命名"} ${mask(c.phone)}` });
+          b.onclick = () => ready(r, b, note, actions, c.phone);
+          actions.append(b);
+        });
+        return;
+      }
+      setMsg(j.notified ? `已用 LINE 通知 ${r.name}` : `${r.name} 已改成待取拍（${j.reason}）`, j.notified ? "ok" : "");
+      loadOrders();
+    } catch (e) {
+      btn.disabled = false; note.textContent = "失敗：" + e.message;
+    }
+  }
+
   // ---------- form ----------
   function today() {
     const d = new Date(), p = (n) => String(n).padStart(2, "0");
@@ -600,11 +772,16 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
       await task.printInit();
       await task.printPage(enc, n);
       await task.waitForFinished();
-      setMsg(`已列印 ${n} 張`, "ok");
       addHistory();
+      const rec = {
+        name: $("phone").value.trim(), phone: selPhone, string: $("string").value.trim(),
+        main: $("tension").value.trim(), cross: currentCross().trim(), pre, tension: currentTension(), date: $("date").value,
+      };
+      setMsg(`已列印 ${n} 張` + (cloudOn() ? "，正在建立紀錄…" : ""), "ok");
+      saveRecord(rec).then((t) => { if (t) setMsg(`已列印 ${n} 張${t}`, t.includes("還沒") ? "err" : "ok"); });
       // next customer: clear the name and the one-off tension options
       $("phone").value = ""; $("crossOn").checked = false; $("cross").value = ""; pre = "";
-      onInput(); $("phone").focus();
+      onInput(); scheduleLookup(); $("phone").focus();
     } catch (e) {
       setMsg("列印失敗：" + (e.message || e), "err");
     } finally {
@@ -635,7 +812,7 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
         $("phone").value = r.phone; $("string").value = r.string; $("tension").value = r.tension;
         $("crossOn").checked = !!r.cross; $("cross").value = r.cross || ""; pre = r.pre || "";
         $("date").value = r.date || today();
-        onInput(); window.scrollTo({ top: 0, behavior: "smooth" });
+        onInput(); scheduleLookup(); window.scrollTo({ top: 0, behavior: "smooth" });
       };
       box.append(el("div", { className: "hist-item" }, n, t, b));
     });
@@ -652,6 +829,17 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
   $("logoRight").checked = cfg.logoRight; $("rotate").checked = cfg.rotate;
 
   ["phone", "string", "tension", "cross", "date"].forEach((id) => $(id).addEventListener("input", onInput));
+  $("phone").addEventListener("input", scheduleLookup);
+  $("apiUrl").value = cfg.apiUrl; $("apiKey").value = cfg.apiKey;
+  const saveApi = () => { cfg.apiUrl = $("apiUrl").value.trim(); cfg.apiKey = $("apiKey").value.trim(); saveCfg(); loadOrders(); };
+  $("apiUrl").addEventListener("change", saveApi); $("apiKey").addEventListener("change", saveApi);
+  $("apiTest").onclick = async () => {
+    saveApi(); $("apiResult").textContent = "測試中…";
+    try { const j = await api("ping"); $("apiResult").textContent = `連線成功：${j.shop}`; loadOrders(); }
+    catch (e) { $("apiResult").textContent = "連線失敗：" + e.message; }
+  };
+  $("ordersRefresh").onclick = loadOrders;
+  $("ordersBox").addEventListener("toggle", () => { if ($("ordersBox").open) loadOrders(); });
   $("crossOn").addEventListener("change", () => {
     if ($("crossOn").checked && !$("cross").value) {
       const m = parseFloat($("tension").value);
@@ -678,6 +866,7 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
   if (!navigator.bluetooth || !lib) { $("noBt").hidden = false; $("connect").disabled = true; }
 
   onInput(); drawHistory();
+  flushOutbox().then(loadOrders);
   loadLogo(store.get("logo", DEFAULT_LOGO));
 })();
 </script>

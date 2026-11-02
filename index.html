@@ -242,7 +242,7 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
         </div>
         <div class="field">
           <label class="lbl" for="preFmt">預拉寫法</label>
-          <select id="preFmt"><option value="pre">預10%</option><option value="plus">+10%</option><option value="full">預拉10%</option></select>
+          <select id="preFmt"><option value="plain">10%</option><option value="plus">+10%</option></select>
         </div>
       </div>
       <label class="check"><input id="logoRight" type="checkbox"> LOGO 放右邊</label>
@@ -275,12 +275,13 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
   };
 
   const cfg = Object.assign({
-    thresh: 140, density: 2, dateFmt: "dash", unit: "p", preFmt: "pre", shopName: "嘉友體育", logoRight: false, rotate: false,
+    thresh: 140, density: 2, dateFmt: "dash", unit: "p", preFmt: "plain", shopName: "嘉友體育", logoRight: false, rotate: false,
     strings: ["z61", "BG65", "BG65Ti", "BG66U", "BG80", "BG80P", "AB", "NBG95", "NBG99", "EX63", "EX65"],
     tensions: ["22", "23", "24", "25", "26", "27", "28", "30"],
     pres: ["5", "10", "15", "20"],
   }, store.get("cfg", {}));
   if (!Array.isArray(cfg.pres)) cfg.pres = ["5", "10", "15", "20"];
+  if (cfg.preFmt !== "plus") cfg.preFmt = "plain";
   const saveCfg = () => store.set("cfg", cfg);
   const DEFAULT_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgAQAAAACjtFqAAAAFEUlEQVR42r2XPY8kRxnHf1U9NzMnra8bEgbpRI/kgNAXWRugmzaQQ0hAsB+B0AHWFNJJpBs6XL6B+QLe5s6SN0DyBQ4uQKKMLHkDxNWtVqhvqek/QVW/zJ5DRCc9/ddTz0v9n7cx4t3H8n8H/3Y+ocpP/4Pij8PvAezXsNzdAwNgfpw/Bp3nhdtdfueODMk9xsP1kaGO1WLleP9I5zVYg+MIhLPi5XguvW4okgO/moH/YCXJVyxnLn1ebYD6d9hmsp5f7ZbdeLxnJUmKUI7HbzgFoIBuPN4ON9CmIxagLXJ4T1lPsS8yaLgZjseTerxe8/d8PJ5sBx4cIUu+qQZBecos+frNyNgPx0v2yxE8ocpgO3Fr6F3SyWhccuudhNSz08xSLVno10c5E5LOqpmgxySdt5ObUk8pWYiGufkTsBBuvk/n0eMiIP1lNdMpb1Lsm3dSWSrquWRgLwufbOGbMYA1YNEzYHs3gAsqLKwbDmiIqgAsd7dwC3608jEoIPmcGpJkvpQlm7gdBC8/w4KZn50XQtn1A7Jdg7pScrt+LD0vIV9K7MV+CGklCw5wuFHjWywXDTLQtFOcFlqwsL0a4wS1pWIh+bGerSw546pR68Khi1rdSgq5GNQvJ8lAzHzeuZG4Cw5T5srtFFcSDCnl9hPFjpfZ0AX9eqe4UjQtRZL8orZ0QCQChwqAiDUkdmwbcg3S0jd79YXCih67lyRf274FesLaGNefp8RDSDJqH6GQytfXVpsU8yPcVKT9RpJTe0odUgChzrG7tuGaLVwlNl8BTes6YngMd0CwBGD7FWenPb8AAZXtC6C6MZ/9Uo420Ug0kjoKerbqFuzV7awVsGBhjHsLlhawxgGWNa75F/wneAg2psjeE0SWOgksPBFJclt2AcntC8XaJnONhxMcXMw60pYnV5Y/Y8LkkjyhFOx8+UKxzsRtzPrfOF6lLLek0WWXEfjn5tAAySUWIAf9IhlILvVGPAWzp1SsbYEDTEpltW0Fzh6So4J+Cf5Dn75Sj91zWuJLSbG2SpLbS3zF+Vhcic2e67P2rwkasq7yAD4nTi61brM08qWRpN1gqKNEXemG2dHkLuGa7jZnIG0z3N7VOleFHd9N83bR52RVu0vdUJ7f82SfdXoAY6iwuRZGTx2BP+WmbflJbm/AdXtvajcOeJIMWaowREpcp4sY+9IW6Be5Eyuk3uXLcGL0naTX49Sm6tZWbgN47DDriAszdbB1Inndg2sBXs66t2LX3N8uFjxLdyOPhU8GPFYe6NtJ0vJ8HDeWBwP8jVJuNjM+x7nmsAzEk5I4D5QmU901VwCv7k/DbWoMlqlNJwqfA9KnZWKuCEhSISF1K0mK1nQmgxauk88PWC6BQ4p90w3UfZzGMUhdIUlxlZp690EaZ4eBeYCuAgvLe1zn3w1APGtzlLPryBPFO9Lo8Sm6o9GTLNjUUj/K4K8Dkw8ARvDmRx3wh1A60MMuSYa73OmBu5iXEz9bhcIqLyc1brzNcJoNiRaozPGqSS0pFJLkLocdzK0kxVVqG+MKF4GiA3o7HvfFOPIfTpKHYZSF5SgZx5XHlbNlr5ztKyNYDLvpV9NWOSye/sFs1ezyeM4nBjBlSQaTSw/cHcC3/GzGrEVbwOdczRa+xUgec7T9dlBqHKeZ9yXclNM6lONbAJzcW8i/NnmvmUvGF9if1vcki0vX/8bP1gYAfh5/e5Qh+TkU3wP+z/6h/BceWyr8pIFAOwAAAABJRU5ErkJggg==";
 
@@ -300,7 +301,7 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
     let t = main;
     if (cross && cross !== main) t += "/" + cross;
     if (isNum(main) && (!cross || isNum(cross))) t += cfg.unit;
-    if (p) t += cfg.preFmt === "plus" ? ` +${p}%` : cfg.preFmt === "full" ? ` 預拉${p}%` : ` 預${p}%`;
+    if (p) t += cfg.preFmt === "plus" ? ` +${p}%` : ` ${p}%`;
     return t;
   }
   const currentCross = () => ($("crossOn").checked ? $("cross").value : "");
@@ -348,8 +349,9 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
   const CJK_FONT = '"Noto Sans TC", "Noto Sans CJK TC", sans-serif';
 
   // Layout follows the shop's existing label: logo + shop name on the left,
-  // name / string + tension / date on the right. When string + tension do not
-  // fit on one line (cross tension, pre-stretch), they get a line each.
+  // name / string + tension / date on the right. With cross tension AND
+  // pre-stretch, name + string share line 1 and tension gets line 2.
+  // Otherwise, if string + tension do not fit on one line, they get a line each.
   function render() {
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
     const leftW = 80, colGap = 8;
@@ -371,7 +373,11 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
     const combined = [str, ten].filter(Boolean).join("  ");
     ctx.font = `700 20px ${LABEL_FONT}`;
     const oneLine = !str || !ten || ctx.measureText(combined).width <= rw;
-    if (oneLine) {
+    const crossCross = currentCross().trim() && currentCross().trim() !== $("tension").value.trim();
+    if (crossCross && pre) {
+      fitText([name || "---", str].filter(Boolean).join(" "), cx, 32, rw, 24, 900, LABEL_FONT);
+      fitText(ten, cx, 58, rw, 23, 700, LABEL_FONT);
+    } else if (oneLine) {
       fitText(name || "---", cx, 32, rw, 24, 900, LABEL_FONT);
       fitText(combined, cx, 58, rw, 23, 700, LABEL_FONT);
     } else {
@@ -393,7 +399,7 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
     if (!document.fonts) return;
     clearTimeout(fontTimer);
     fontTimer = setTimeout(() => {
-      const text = [$("phone").value, $("string").value, currentTension(), cfg.shopName, "0123456789-/p預拉磅%+"].join("");
+      const text = [$("phone").value, $("string").value, currentTension(), cfg.shopName, "0123456789-/p磅%+"].join("");
       Promise.all([
         document.fonts.load('900 24px "Noto Sans TC"', text),
         document.fonts.load('700 24px "Noto Sans TC"', text),

@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2b2540">
+<title>社群收藏整理</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+/* 一欄式：上方貼連結，中間篩選（平台／分類／搜尋），下方是收藏卡片。全部資料只存在這支手機/電腦的瀏覽器裡。 */
+:root {
+  --bg: #f3f1f6;
+  --surface: #ffffff;
+  --ink: #1d1a26;
+  --muted: #6a6478;
+  --line: #dcd7e4;
+  --accent: #2b2540;
+  --accent-ink: #ffffff;
+  --chip: #e8e4ef;
+  --ok: #1f7a4d;
+  --err: #b3261e;
+  --fb: #1877f2; --ig: #c13584; --th: #222222; --xhs: #ff2442; --yt: #e00000; --tt: #00a3a3; --x: #444444; --web: #6a6478; --dc: #006aa6; --ptt: #5a5a5a; --line-c: #06a24a;
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131118; --surface: #1d1a24; --ink: #ebe7f2; --muted: #a39cb1; --line: #322d3d;
+    --accent: #c9b8ff; --accent-ink: #1a1427; --chip: #28232f; --ok: #5fcf96; --err: #ff8a80;
+    --fb: #6aa8ff; --ig: #f07ac0; --th: #d8d8d8; --xhs: #ff6b7f; --yt: #ff6b6b; --tt: #4fd6d6; --x: #bdbdbd; --web: #a39cb1; --dc: #58b6f0; --ptt: #bdbdbd; --line-c: #4fd38a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131118; --surface: #1d1a24; --ink: #ebe7f2; --muted: #a39cb1; --line: #322d3d;
+  --accent: #c9b8ff; --accent-ink: #1a1427; --chip: #28232f; --ok: #5fcf96; --err: #ff8a80;
+  --fb: #6aa8ff; --ig: #f07ac0; --th: #d8d8d8; --xhs: #ff6b7f; --yt: #ff6b6b; --tt: #4fd6d6; --x: #bdbdbd; --web: #a39cb1; --dc: #58b6f0; --ptt: #bdbdbd; --line-c: #4fd38a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: calc(12px + env(safe-area-inset-top, 0px)) calc(80px + env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font-size: 20px; margin: 0; letter-spacing: .02em; }
+.count { font-size: 13px; color: var(--muted); white-space: nowrap; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 10px; }
+textarea, input, select {
+  width: 100%; font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-height: 44px;
+}
+textarea { resize: vertical; min-height: 92px; }
+textarea:focus-visible, input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn {
+  font: inherit; font-size: 14px; font-weight: 500; padding: 8px 14px; min-height: 40px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+.btn.danger { color: var(--err); }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+
+.filters { display: grid; gap: 8px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.chip {
+  flex: none; font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid transparent;
+  background: var(--chip); color: var(--ink); cursor: pointer; min-height: 34px; white-space: nowrap;
+}
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; background: var(--surface); }
+.chip .n { color: var(--muted); font-weight: 400; margin-left: 3px; font-variant-numeric: tabular-nums; }
+.search-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.check input { width: 18px; height: 18px; min-height: 0; margin: 0; }
+
+.list { display: grid; gap: 8px; }
+.item {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+  display: grid; gap: 6px;
+}
+.item.done { opacity: .55; }
+.item-top { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.plat {
+  flex: none; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px;
+  color: var(--pc, var(--web)); border: 1px solid currentColor; letter-spacing: .02em;
+}
+.title { flex: 1; min-width: 0; font-weight: 500; color: var(--ink); text-decoration: none; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.title:hover { text-decoration: underline; }
+.url { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; white-space: pre-wrap; }
+.item-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.item-bar select { width: auto; max-width: 7.5em; min-height: 34px; padding: 4px 8px; font-size: 13px; border-radius: 8px; }
+.mini {
+  font: inherit; font-size: 13px; min-height: 34px; padding: 4px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.mini.del { color: var(--err); margin-left: auto; }
+.date { font-size: 12px; color: var(--muted); }
+.edit-box { display: grid; gap: 6px; }
+.edit-box input, .edit-box textarea { font-size: 14px; min-height: 38px; padding: 6px 10px; }
+.edit-box textarea { min-height: 60px; }
+.empty { text-align: center; color: var(--muted); padding: 28px 12px; font-size: 14px; }
+
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
+.panel { padding: 0 14px 14px; display: grid; gap: 12px; }
+.panel h2 { font-size: 14px; margin: 4px 0 0; }
+#catText { min-height: 220px; font-size: 13px; line-height: 1.6; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  background: var(--accent); color: var(--accent-ink); padding: 10px 14px; border-radius: 12px;
+  display: flex; gap: 12px; align-items: center; font-size: 14px; max-width: calc(100vw - 32px); z-index: 10;
+  box-shadow: 0 4px 16px rgba(0,0,0,.2);
+}
+.toast button { font: inherit; font-weight: 700; background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; padding: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>社群收藏整理</h1>
+    <span class="count" id="count"></span>
+  </header>
+
+  <section class="card" aria-label="新增連結">
+    <textarea id="input" placeholder="把連結貼在這裡（可以一次貼很多個）&#10;&#10;從 FB / IG / Threads / 小紅書 按「分享 → 複製連結」，連分享文字一起貼上也可以，標題會自動抓出來。"></textarea>
+    <div class="actions">
+      <button class="btn primary" id="addBtn" type="button">加入並自動分類</button>
+      <button class="btn" id="pasteBtn" type="button">從剪貼簿貼上</button>
+      <button class="btn" id="fileBtn" type="button">匯入檔案</button>
+      <input type="file" id="fileInput" accept=".html,.htm,.json,.txt,.csv" hidden>
+    </div>
+    <p class="hint">匯入檔案支援：瀏覽器匯出的書籤（.html）、IG / FB「下載你的資訊」裡的收藏 JSON、本工具的備份檔、純文字。</p>
+  </section>
+
+  <section class="filters" aria-label="篩選">
+    <div class="chips" id="platChips" role="group" aria-label="平台"></div>
+    <div class="chips" id="catChips" role="group" aria-label="分類"></div>
+    <div class="search-row">
+      <input id="search" type="search" placeholder="搜尋標題、備註、網址…">
+      <label class="check"><input type="checkbox" id="hideDone">隱藏已看</label>
+    </div>
+  </section>
+
+  <section class="list" id="list" aria-live="polite"></section>
+
+  <details>
+    <summary>分類與關鍵字設定</summary>
+    <div class="panel">
+      <p class="hint">一行一個分類，格式「分類名稱: 關鍵字, 關鍵字…」。新加入的連結會用標題、備註、網址比對關鍵字，命中最多的分類勝出；都沒命中就放「未分類」。你手動改過分類的項目不會被重新分類覆蓋。</p>
+      <textarea id="catText" spellcheck="false"></textarea>
+      <div class="actions">
+        <button class="btn primary" id="saveCats" type="button">儲存分類</button>
+        <button class="btn" id="reclassify" type="button">重新自動分類（略過手動設定的）</button>
+        <button class="btn" id="resetCats" type="button">還原預設分類</button>
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>備份與搬家</summary>
+    <div class="panel">
+      <p class="hint">資料只存在這個瀏覽器裡。換手機、換電腦或清除瀏覽資料前，先匯出備份；到新裝置用上方「匯入檔案」選備份檔即可（會合併、不會重複）。</p>
+      <div class="actions">
+        <button class="btn" id="exportJson" type="button">匯出備份（JSON）</button>
+        <button class="btn" id="exportHtml" type="button">匯出成書籤檔（可匯入瀏覽器）</button>
+        <button class="btn danger" id="clearAll" type="button">全部清除</button>
+      </div>
+    </div>
+  </details>
+</div>
+
+<div class="toast" id="toast" role="status" hidden><span id="toastMsg"></span><button id="toastUndo" type="button" hidden>復原</button></div>
+
+<script>
+'use strict';
+
+/* ---------- 平台判斷 ---------- */
+const PLATFORMS = [
+  { id: 'fb',   name: 'Facebook',  color: 'var(--fb)',  hosts: ['facebook.com', 'fb.com', 'fb.watch', 'fb.me'] },
+  { id: 'ig',   name: 'Instagram', color: 'var(--ig)',  hosts: ['instagram.com', 'instagr.am'] },
+  { id: 'th',   name: 'Threads',   color: 'var(--th)',  hosts: ['threads.net', 'threads.com'] },
+  { id: 'xhs',  name: '小紅書',     color: 'var(--xhs)', hosts: ['xiaohongshu.com', 'xhslink.com', 'xhscdn.com'] },
+  { id: 'yt',   name: 'YouTube',   color: 'var(--yt)',  hosts: ['youtube.com', 'youtu.be'] },
+  { id: 'tt',   name: 'TikTok/抖音', color: 'var(--tt)', hosts: ['tiktok.com', 'douyin.com'] },
+  { id: 'x',    name: 'X',         color: 'var(--x)',   hosts: ['x.com', 'twitter.com', 't.co'] },
+  { id: 'dc',   name: 'Dcard',     color: 'var(--dc)',  hosts: ['dcard.tw'] },
+  { id: 'ptt',  name: 'PTT',       color: 'var(--ptt)', hosts: ['ptt.cc', 'pttweb.cc'] },
+  { id: 'line', name: 'LINE',      color: 'var(--line-c)', hosts: ['line.me', 'lin.ee'] },
+  { id: 'web',  name: '其他網站',   color: 'var(--web)', hosts: [] },
+];
+const PLAT_BY_ID = Object.fromEntries(PLATFORMS.map(p => [p.id, p]));
+
+function platformOf(host) {
+  host = host.toLowerCase();
+  for (const p of PLATFORMS) {
+    if (p.hosts.some(h => host === h || host.endsWith('.' + h))) return p.id;
+  }
+  return 'web';
+}
+
+/* ---------- 預設分類（繁簡都放，小紅書多是簡體） ---------- */
+const DEFAULT_CATS = `美食: 美食, 餐廳, 餐厅, 好吃, 咖啡, 甜點, 甜品, 蛋糕, 食譜, 食谱, 料理, 早午餐, 火鍋, 拉麵, 小吃, 探店, 宵夜, 烘焙, 飲料, 奶茶, 便當
+旅遊: 旅遊, 旅游, 旅行, 景點, 景点, 住宿, 飯店, 酒店, 民宿, 露營, 行程, 自由行, 攻略, 機票, 日本, 韓國, 泰國, 京都, 東京, 大阪, 首爾, 一日遊, 打卡
+穿搭: 穿搭, 衣服, 搭配, 時尚, 时尚, ootd, 鞋, 包包, 外套, 褲, 裙
+美妝保養: 美妝, 美妆, 保養, 護膚, 护肤, 化妝, 化妆, 口紅, 底妝, 防曬, 香水, 髮型, 发型, 美甲, 面膜, 精華
+運動健身: 運動, 运动, 健身, 羽球, 羽毛球, 球拍, 穿線, 拉線, 跑步, 瑜伽, 重訓, 減脂, 减脂, 伸展, 球鞋, badminton, gym, workout, yonex, victor, li-ning
+居家生活: 居家, 收納, 收纳, 裝潢, 装修, 家具, 清潔, 打掃, 佈置, 家居, 好物, 生活小物, ikea, 植物
+學習工作: 學習, 学习, 教學, 教程, 筆記, 笔记, 技巧, 職場, 职场, 英文, 英語, 課程, 效率, 行銷, 經營, 創業, excel, notion, ai, chatgpt, claude, 簡報
+3C科技: 3c, 手機, 手机, iphone, android, 電腦, 电脑, 開箱, 开箱, 相機, 耳機, 平板, ipad, mac, app推薦
+理財: 理財, 理财, 投資, 投资, 股票, etf, 存錢, 存钱, 信用卡, 省錢, 保險, 退休, 基金
+親子: 育兒, 育儿, 寶寶, 宝宝, 親子, 亲子, 小孩, 孩子, 幼兒, 媽媽, 繪本
+娛樂: 電影, 电影, 影集, 追劇, 韓劇, 音樂, 演唱會, 動漫, 遊戲, 游戏, 搞笑, 迷因, 推書, 書單`;
+
+const UNCAT = '未分類';
+const KEY = 'social-links-v1';
+
+/* ---------- 狀態 ---------- */
+let state = load();
+let view = { plat: 'all', cat: 'all', q: '', hideDone: false, editing: null };
+let lastRemoved = null;
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (Array.isArray(s.items) && typeof s.cats === 'string') return s;
+    }
+  } catch (e) { /* 私密模式或資料壞掉 → 用空白開始 */ }
+  return { items: [], cats: DEFAULT_CATS };
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch (e) { toast('存檔失敗：瀏覽器空間不足或不允許儲存，請先匯出備份'); }
+}
+
+function parseCats(text) {
+  const out = [];
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*([^:：]+?)\s*[:：]\s*(.*)$/);
+    const name = (m ? m[1] : line).trim();
+    if (!name || name === UNCAT) continue;
+    const kws = m ? m[2].split(/[,，、]/).map(s => s.trim().toLowerCase()).filter(Boolean) : [];
+    out.push({ name, kws });
+  }
+  return out;
+}
+function cats() { return parseCats(state.cats); }
+
+function classify(item, catList = cats()) {
+  const hay = `${item.title} ${item.note} ${item.url}`.toLowerCase();
+  let best = UNCAT, bestScore = 0;
+  for (const c of catList) {
+    let score = 0;
+    for (const k of c.kws) if (k && hay.includes(k)) score += 1;
+    if (score > bestScore) { best = c.name; bestScore = score; }
+  }
+  return best;
+}
+
+/* ---------- 網址整理 ---------- */
+const TRACKING = /^(utm_\w+|fbclid|gclid|igsh|igshid|mibextid|rdid|xmt|si|feature|share_id|share_from_user_hidden|app_platform|app_version|share_app_id|apptime|shareRedId|author_share|xhsshare|exSource|ref|ref_src|ref_url|_rdr|is_from_webapp|sender_device|web_id|_t|_r|s|t)$/i;
+
+function cleanUrl(raw) {
+  let u;
+  try { u = new URL(raw.trim()); } catch (e) { return null; }
+  if (!/^https?:$/.test(u.protocol)) return null;
+  const plat = platformOf(u.hostname);
+  // 小紅書筆記的 xsec_token 是開啟頁面所需，保留；其他平台的追蹤參數拿掉
+  for (const k of [...u.searchParams.keys()]) {
+    const junk = plat === 'web' ? /^(utm_\w+|fbclid|gclid|igsh|igshid|mibextid)$/i.test(k) : TRACKING.test(k) && !(plat === 'yt' && k === 't');
+    if (junk) u.searchParams.delete(k);
+  }
+  u.hash = u.hash && plat === 'web' ? u.hash : '';
+  return u;
+}
+function keyOf(u) {
+  const host = u.hostname.toLowerCase().replace(/^(www|m|mobile|web)\./, '');
+  let path = u.pathname.replace(/\/+$/, '');
+  const plat = platformOf(host);
+  let qs = '';
+  if (plat === 'yt' && u.searchParams.get('v')) qs = 'v=' + u.searchParams.get('v');
+  else if (plat === 'fb' && (u.searchParams.get('story_fbid') || u.searchParams.get('fbid') || u.searchParams.get('v')))
+    qs = [...u.searchParams].filter(([k]) => /^(story_fbid|fbid|id|v)$/.test(k)).map(p => p.join('=')).join('&');
+  else if (plat === 'web') qs = u.searchParams.toString();
+  if (plat === 'yt' && host === 'youtu.be') return 'yt:' + path.slice(1);
+  if (plat === 'yt' && qs) return 'yt:' + u.searchParams.get('v');
+  if (plat === 'xhs') { const m = path.match(/([0-9a-f]{24})/); if (m) return 'xhs:' + m[1]; }
+  if (plat === 'th') path = path.replace(/^\/@[^/]+/, '');           // threads 同一篇在不同網址
+  return host + path + (qs ? '?' + qs : '');
+}
+
+/* ---------- 從貼上的文字抓出連結與標題 ---------- */
+const URL_RE = /https?:\/\/[^\s<>"'，。！？、）】「」『』　]+/gi;
+
+function tidyTitle(t) {
+  if (!t) return '';
+  let s = t;
+  s = s.replace(/[，,]?\s*(复制|複製)本[条條].*$/, '').replace(/打[开開]【小[红紅]书】.*$/, '');
+  const br = s.match(/【([^】]{2,})】/);                        // 小紅書新版：【標題 - 作者 | 小红书 - 你的生活指南】
+  if (br) s = br[1];
+  s = s.replace(/\s*[|｜]\s*小[红紅]书.*$/, '')
+       .replace(/[^\s]*?发布了一篇小红书笔记，快来看吧！?/g, '')
+       .replace(/复制本条信息.*$/, '').replace(/複製本條信息.*$/, '')
+       .replace(/😆\s*\w+\s*😆/g, '')
+       .replace(/^\s*\d{1,3}\s+/, '')
+       .replace(/(在\s*)?(Threads|Instagram|Facebook)\s*(上)?(查看|看看).*$/i, '')
+       .replace(/^[\s:：\-—|·•>]+|[\s:：\-—|·•>]+$/g, '');
+  return s.trim().slice(0, 200);
+}
+
+function extractFromText(text) {
+  const found = [];
+  const lines = text.split(/\r?\n/);
+  let carry = '';                                                     // 只有文字沒有網址的行 → 當作下一個網址的標題
+  for (const line of lines) {
+    const urls = [...line.matchAll(URL_RE)];
+    if (!urls.length) { if (line.trim()) carry = (carry ? carry + ' ' : '') + line.trim(); continue; }
+    let prev = 0;
+    urls.forEach((m, i) => {
+      const before = line.slice(prev, m.index).trim();
+      const after = i === urls.length - 1 ? line.slice(m.index + m[0].length).trim() : '';
+      let title = tidyTitle(before) || tidyTitle(carry) || tidyTitle(after);
+      found.push({ url: m[0].replace(/[).,;]+$/, ''), title });
+      prev = m.index + m[0].length;
+      carry = '';
+    });
+  }
+  return found;
+}
+
+/* ---------- 新增 ---------- */
+function addEntries(entries, { source = '' } = {}) {
+  const catList = cats();
+  const byKey = new Map(state.items.map(it => [it.key, it]));
+  let added = 0, dup = 0, bad = 0;
+  for (const e of entries) {
+    const u = cleanUrl(e.url || '');
+    if (!u) { bad++; continue; }
+    const key = keyOf(u);
+    const exist = byKey.get(key);
+    if (exist) {
+      if (!exist.title && e.title) exist.title = e.title;
+      dup++; continue;
+    }
+    const item = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      url: u.toString(), key,
+      plat: platformOf(u.hostname),
+      title: (e.title || '').trim(),
+      note: (e.note || '').trim(),
+      cat: e.cat || '', manual: !!e.manual, done: !!e.done,
+      added: e.added || new Date().toISOString(),
+      source,
+    };
+    if (!item.cat) item.cat = classify(item, catList);
+    state.items.unshift(item);
+    byKey.set(key, item);
+    added++;
+  }
+  save(); render();
+  const parts = [`新增 ${added} 筆`];
+  if (dup) parts.push(`${dup} 筆已存在`);
+  if (bad) parts.push(`${bad} 筆不是網址`);
+  toast(parts.join('，'));
+  return added;
+}
+
+/* ---------- 匯入檔案 ---------- */
+function importBookmarkHtml(text) {
+  const doc = new DOMParser().parseFromString(text, 'text/html');
+  const entries = [];
+  for (const a of doc.querySelectorAll('a[href]')) {
+    const folders = [];
+    let node = a.closest('dl');
+    while (node) {                                                   // Netscape 書籤格式：<DT><H3>資料夾</H3><DL>…</DL>
+      const h = node.previousElementSibling;
+      if (h && h.tagName === 'H3') folders.unshift(h.textContent.trim());
+      else if (node.parentElement && node.parentElement.tagName === 'DT') {
+        const h3 = node.parentElement.querySelector(':scope > h3');
+        if (h3) folders.unshift(h3.textContent.trim());
+      }
+      node = node.parentElement && node.parentElement.closest('dl');
+    }
+    const add = a.getAttribute('add_date');
+    entries.push({
+      url: a.getAttribute('href'),
+      title: a.textContent.trim(),
+      note: folders.length ? '書籤資料夾：' + folders.join(' / ') : '',
+      added: add && /^\d+$/.test(add) ? new Date(+add * 1000).toISOString() : undefined,
+    });
+  }
+  return entries;
+}
+
+function harvestJson(obj) {
+  // IG／FB「下載你的資訊」的收藏檔結構常變，這裡不寫死：把所有網址撈出來，順便抓同一層的 title / 時間
+  const out = [];
+  const walk = (v, ctxTitle) => {
+    if (Array.isArray(v)) { v.forEach(x => walk(x, ctxTitle)); return; }
+    if (v && typeof v === 'object') {
+      const t = typeof v.title === 'string' ? v.title : (typeof v.name === 'string' ? v.name : ctxTitle);
+      for (const [k, x] of Object.entries(v)) {
+        if (typeof x === 'string' && /^https?:\/\//i.test(x) && /href|url|uri|link/i.test(k)) {
+          let added;
+          const ts = v.timestamp || (v.string_map_data && Object.values(v.string_map_data)[0]?.timestamp);
+          if (typeof ts === 'number') added = new Date(ts * (ts < 1e12 ? 1000 : 1)).toISOString();
+          out.push({ url: x, title: fixMojibake(t || ''), added });
+        } else walk(x, t);
+      }
+    }
+  };
+  walk(obj, '');
+  return out;
+}
+// Meta 匯出的中文常被存成 latin-1 亂碼（例如 "Ã¥Â..."），這裡試著轉回 UTF-8
+function fixMojibake(s) {
+  if (!/[À-ÿ][\u0080-¿]/.test(s)) return s;
+  try {
+    const bytes = Uint8Array.from([...s].map(c => c.charCodeAt(0) & 0xff));
+    const r = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return r;
+  } catch (e) { return s; }
+}
+
+async function importFile(file) {
+  const text = await file.text();
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.json')) {
+    let data;
+    try { data = JSON.parse(text); } catch (e) { toast('JSON 格式錯誤，無法匯入'); return; }
+    if (data && data.app === 'social-links' && Array.isArray(data.items)) {
+      if (typeof data.cats === 'string' && data.cats.trim() && confirm('備份檔裡有分類設定，要一起套用嗎？\n（取消＝保留目前的分類）')) state.cats = data.cats;
+      addEntries(data.items, { source: '備份' });
+    } else {
+      const entries = harvestJson(data);
+      if (!entries.length) { toast('這個 JSON 裡找不到網址'); return; }
+      addEntries(entries, { source: file.name });
+    }
+  } else if (/\.html?$/.test(name) || /<a\s[^>]*href/i.test(text.slice(0, 5000))) {
+    addEntries(importBookmarkHtml(text), { source: '書籤' });
+  } else {
+    addEntries(extractFromText(text), { source: file.name });
+  }
+}
+
+/* ---------- 畫面 ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function matches(it, ignore) {
+  if (ignore !== 'plat' && view.plat !== 'all' && it.plat !== view.plat) return false;
+  if (ignore !== 'cat' && view.cat !== 'all' && it.cat !== view.cat) return false;
+  if (view.hideDone && it.done) return false;
+  if (view.q) {
+    const hay = `${it.title} ${it.note} ${it.url} ${it.cat}`.toLowerCase();
+    if (!view.q.toLowerCase().split(/\s+/).every(w => hay.includes(w))) return false;
+  }
+  return true;
+}
+
+function renderChips() {
+  const platCount = {}, catCount = {};
+  for (const it of state.items) {
+    if (matches(it, 'plat')) platCount[it.plat] = (platCount[it.plat] || 0) + 1;
+    if (matches(it, 'cat')) catCount[it.cat] = (catCount[it.cat] || 0) + 1;
+  }
+  const chip = (group, id, label, n) =>
+    `<button type="button" class="chip" data-${group}="${esc(id)}" aria-pressed="${view[group] === id}">${esc(label)}<span class="n">${n}</span></button>`;
+  const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
+
+  $('platChips').innerHTML = chip('plat', 'all', '全部平台', sum(platCount)) +
+    PLATFORMS.filter(p => platCount[p.id] || view.plat === p.id).map(p => chip('plat', p.id, p.name, platCount[p.id] || 0)).join('');
+
+  const names = [...cats().map(c => c.name), UNCAT];
+  for (const k of Object.keys(catCount)) if (!names.includes(k)) names.splice(names.length - 1, 0, k);
+  $('catChips').innerHTML = chip('cat', 'all', '全部分類', sum(catCount)) +
+    names.filter(n => catCount[n] || view.cat === n).map(n => chip('cat', n, n, catCount[n] || 0)).join('');
+}
+
+function catOptions(current) {
+  const names = [...cats().map(c => c.name), UNCAT];
+  if (current && !names.includes(current)) names.unshift(current);
+  return names.map(n => `<option${n === current ? ' selected' : ''}>${esc(n)}</option>`).join('') +
+    '<option value="__new">＋ 新分類…</option>';
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function renderList() {
+  const items = state.items.filter(it => matches(it));
+  $('count').textContent = `共 ${state.items.length} 筆` + (items.length !== state.items.length ? `・顯示 ${items.length}` : '');
+  if (!state.items.length) {
+    $('list').innerHTML = '<div class="empty">還沒有收藏。<br>到 FB / IG / Threads / 小紅書 按「分享 → 複製連結」，貼到上面就好。</div>';
+    return;
+  }
+  if (!items.length) { $('list').innerHTML = '<div class="empty">沒有符合條件的收藏</div>'; return; }
+  const MAX = 300;
+  $('list').innerHTML = items.slice(0, MAX).map(it => {
+    const p = PLAT_BY_ID[it.plat] || PLAT_BY_ID.web;
+    let host = '';
+    try { host = new URL(it.url).hostname.replace(/^www\./, ''); } catch (e) {}
+    const shown = it.title || host + new URL(it.url).pathname;
+    if (view.editing === it.id) {
+      return `<article class="item" data-id="${it.id}">
+        <div class="edit-box">
+          <input data-f="title" value="${esc(it.title)}" placeholder="標題（自己取個好認的名字）">
+          <textarea data-f="note" placeholder="備註，例如：想去的店、要買的東西…">${esc(it.note)}</textarea>
+          <div class="item-bar"><button class="mini" data-act="saveEdit" type="button">儲存</button><button class="mini" data-act="cancelEdit" type="button">取消</button></div>
+        </div></article>`;
+    }
+    return `<article class="item${it.done ? ' done' : ''}" data-id="${it.id}">
+      <div class="item-top">
+        <span class="plat" style="--pc:${p.color}">${esc(p.name)}</span>
+        <a class="title" href="${esc(it.url)}" target="_blank" rel="noopener noreferrer" data-act="open">${esc(shown)}</a>
+      </div>
+      ${it.title ? `<div class="url">${esc(it.url)}</div>` : ''}
+      ${it.note ? `<div class="note">${esc(it.note)}</div>` : ''}
+      <div class="item-bar">
+        <select data-act="cat" aria-label="分類">${catOptions(it.cat)}</select>
+        <button class="mini" data-act="done" type="button">${it.done ? '標成未看' : '已看'}</button>
+        <button class="mini" data-act="edit" type="button">編輯</button>
+        <span class="date">${fmtDate(it.added)}</span>
+        <button class="mini del" data-act="del" type="button" aria-label="刪除">刪除</button>
+      </div>
+    </article>`;
+  }).join('') + (items.length > MAX ? `<div class="empty">只顯示前 ${MAX} 筆，請用平台、分類或搜尋縮小範圍</div>` : '');
+}
+
+function render() { renderChips(); renderList(); }
+
+let toastTimer;
+function toast(msg, undo) {
+  $('toastMsg').textContent = msg;
+  $('toastUndo').hidden = !undo;
+  $('toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $('toast').hidden = true; }, undo ? 6000 : 3000);
+}
+
+/* ---------- 事件 ---------- */
+$('addBtn').addEventListener('click', () => {
+  const text = $('input').value;
+  const entries = extractFromText(text);
+  if (!entries.length) { toast('沒找到網址，請確認有貼上 http 開頭的連結'); return; }
+  addEntries(entries);
+  $('input').value = '';
+});
+$('pasteBtn').addEventListener('click', async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    $('input').value = ($('input').value ? $('input').value + '\n' : '') + t;
+    $('input').focus();
+  } catch (e) { toast('瀏覽器不允許讀剪貼簿，請長按輸入框手動貼上'); }
+});
+$('fileBtn').addEventListener('click', () => $('fileInput').click());
+$('fileInput').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (f) await importFile(f);
+  e.target.value = '';
+});
+
+document.querySelector('.filters').addEventListener('click', e => {
+  const b = e.target.closest('.chip');
+  if (!b) return;
+  if (b.dataset.plat) view.plat = b.dataset.plat;
+  if (b.dataset.cat) view.cat = b.dataset.cat;
+  render();
+});
+$('search').addEventListener('input', e => { view.q = e.target.value.trim(); render(); });
+$('hideDone').addEventListener('change', e => { view.hideDone = e.target.checked; render(); });
+
+$('list').addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const art = el.closest('.item');
+  const it = art && state.items.find(x => x.id === art.dataset.id);
+  if (!it) return;
+  const act = el.dataset.act;
+  if (act === 'done') { it.done = !it.done; save(); render(); }
+  else if (act === 'edit') { view.editing = it.id; renderList(); $('list').querySelector(`[data-id="${it.id}"] input`)?.focus(); }
+  else if (act === 'cancelEdit') { view.editing = null; renderList(); }
+  else if (act === 'saveEdit') {
+    it.title = art.querySelector('[data-f="title"]').value.trim();
+    it.note = art.querySelector('[data-f="note"]').value.trim();
+    if (!it.manual) it.cat = classify(it);
+    view.editing = null; save(); render();
+  }
+  else if (act === 'del') {
+    const idx = state.items.indexOf(it);
+    state.items.splice(idx, 1);
+    lastRemoved = { it, idx };
+    save(); render();
+    toast('已刪除', true);
+  }
+});
+$('list').addEventListener('change', e => {
+  if (e.target.dataset.act !== 'cat') return;
+  const it = state.items.find(x => x.id === e.target.closest('.item').dataset.id);
+  let v = e.target.value;
+  if (v === '__new') {
+    v = (prompt('新分類名稱') || '').trim();
+    if (!v) { render(); return; }
+    if (!cats().some(c => c.name === v) && v !== UNCAT) state.cats = state.cats.replace(/\s*$/, '') + `\n${v}: `;
+    $('catText').value = state.cats;
+  }
+  it.cat = v; it.manual = true;
+  save(); render();
+});
+$('toastUndo').addEventListener('click', () => {
+  if (!lastRemoved) return;
+  state.items.splice(lastRemoved.idx, 0, lastRemoved.it);
+  lastRemoved = null; save(); render();
+  $('toast').hidden = true;
+});
+
+$('catText').value = state.cats;
+$('saveCats').addEventListener('click', () => {
+  state.cats = $('catText').value.trim();
+  save(); render(); toast('分類已儲存');
+});
+$('reclassify').addEventListener('click', () => {
+  state.cats = $('catText').value.trim();
+  const list = cats();
+  let changed = 0;
+  for (const it of state.items) {
+    if (it.manual) continue;
+    const c = classify(it, list);
+    if (c !== it.cat) { it.cat = c; changed++; }
+  }
+  save(); render(); toast(`重新分類完成，${changed} 筆有變動`);
+});
+$('resetCats').addEventListener('click', () => {
+  if (!confirm('還原成預設分類與關鍵字？（已收藏的連結不會刪除）')) return;
+  state.cats = DEFAULT_CATS; $('catText').value = state.cats; save(); render();
+});
+
+function download(name, text, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const stamp = () => new Date().toISOString().slice(0, 10);
+$('exportJson').addEventListener('click', () => {
+  download(`社群收藏備份-${stamp()}.json`, JSON.stringify({ app: 'social-links', version: 1, exported: new Date().toISOString(), cats: state.cats, items: state.items }, null, 1), 'application/json');
+});
+$('exportHtml').addEventListener('click', () => {
+  // 依「分類 / 平台」產生資料夾，可匯入 Chrome、Safari、Edge 的書籤
+  const groups = {};
+  for (const it of state.items) ((groups[it.cat] ||= {})[it.plat] ||= []).push(it);
+  let h = '<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n<DT><H3>社群收藏</H3>\n<DL><p>\n';
+  for (const [cat, plats] of Object.entries(groups)) {
+    h += `<DT><H3>${esc(cat)}</H3>\n<DL><p>\n`;
+    for (const [pid, arr] of Object.entries(plats)) {
+      h += `<DT><H3>${esc((PLAT_BY_ID[pid] || PLAT_BY_ID.web).name)}</H3>\n<DL><p>\n`;
+      for (const it of arr) h += `<DT><A HREF="${esc(it.url)}" ADD_DATE="${Math.floor(new Date(it.added) / 1000) || ''}">${esc(it.title || it.url)}</A>\n`;
+      h += '</DL><p>\n';
+    }
+    h += '</DL><p>\n';
+  }
+  h += '</DL><p>\n</DL><p>\n';
+  download(`社群收藏書籤-${stamp()}.html`, h, 'text/html');
+});
+$('clearAll').addEventListener('click', () => {
+  if (!state.items.length) return;
+  if (!confirm(`確定刪除全部 ${state.items.length} 筆收藏？建議先匯出備份。`)) return;
+  state.items = []; save(); render();
+});
+
+/* ---------- Android：從 App 按「分享」直接送進來（需先「加到主畫面」） ---------- */
+(function handleShare() {
+  const p = new URLSearchParams(location.search);
+  if (!p.has('share')) return;
+  const text = [p.get('title'), p.get('text'), p.get('url')].filter(Boolean).join('\n');
+  history.replaceState(null, '', location.pathname);
+  const entries = extractFromText(text);
+  if (entries.length) {
+    if (!entries[0].title && p.get('title')) entries[0].title = tidyTitle(p.get('title'));
+    addEntries(entries, { source: '分享' });
+  } else if (text) {
+    $('input').value = text;
+  }
+})();
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+render();
+</script>
+</body>
+</html>

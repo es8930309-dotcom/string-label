@@ -404,16 +404,30 @@ summary .pill { margin-left: 6px; }
     ctx.fillStyle = "#000"; ctx.textBaseline = "alphabetic"; ctx.textAlign = "center";
     if (cfg.shopName) fitText(cfg.shopName, lx + leftW / 2, 84, leftW, 17, 900, CJK_FONT);
     const cx = rx + rw / 2;
+    // Line 2 sits beside the logo, so it may grow left up to the logo's edge.
+    const logoEdge = cfg.logoRight ? lx + (leftW - logoS) / 2 - 3 : lx + (leftW + logoS) / 2 + 3;
+    const ex0 = cfg.logoRight ? 3 : logoEdge, ex1 = cfg.logoRight ? logoEdge : W - 3;
+    const widthAt = (t, size) => { ctx.font = `700 ${size}px ${LABEL_FONT}`; return ctx.measureText(t).width; };
+    function placeLine2(t) {
+      for (let s = 23; s >= 20; s--) if (widthAt(t, s) <= rw) return { x: cx, s };
+      for (let s = 21; s >= 15; s--) if (widthAt(t, s) <= ex1 - ex0) return { x: (ex0 + ex1) / 2, s };
+      return null;
+    }
+    function drawLine2(p, t) { ctx.font = `700 ${p.s}px ${LABEL_FONT}`; ctx.fillText(t, p.x, 58); }
+
     const combined = [str, ten].filter(Boolean).join("  ");
-    ctx.font = `700 20px ${LABEL_FONT}`;
-    const oneLine = !str || !ten || ctx.measureText(combined).width <= rw;
     const crossCross = currentCross().trim() && currentCross().trim() !== $("tension").value.trim();
-    if (crossCross && pre) {
-      fitText([name || "---", str].filter(Boolean).join(" "), cx, 32, rw, 24, 900, LABEL_FONT);
-      fitText(ten, cx, 58, rw, 23, 700, LABEL_FONT);
-    } else if (oneLine) {
+    const p2 = placeLine2(crossCross && pre ? ten : combined);
+    if (crossCross && pre && p2) {
+      // name + string also sits beside the logo: grow left before shrinking
+      const l1 = [name || "---", str].filter(Boolean).join(" ");
+      ctx.font = `900 20px ${LABEL_FONT}`;
+      if (ctx.measureText(l1).width <= rw) fitText(l1, cx, 32, rw, 24, 900, LABEL_FONT);
+      else fitText(l1, (ex0 + ex1) / 2, 32, ex1 - ex0, 22, 900, LABEL_FONT);
+      drawLine2(p2, ten);
+    } else if (!(crossCross && pre) && p2) {
       fitText(name || "---", cx, 32, rw, 24, 900, LABEL_FONT);
-      fitText(combined, cx, 58, rw, 23, 700, LABEL_FONT);
+      drawLine2(p2, combined);
     } else {
       fitText(name || "---", cx, 22, rw, 21, 900, LABEL_FONT);
       fitText(str, cx, 42, rw, 18, 700, LABEL_FONT);

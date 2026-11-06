@@ -13,6 +13,11 @@ const CONFIG = {
   API_KEY: '在這裡設定店家密碼',
   SHOP_NAME: '嘉友體育',
   SHOP_INFO: '🏸 嘉友體育\n📍 地址：（請填寫）\n🕘 營業時間：（請填寫）\n📞 電話：（請填寫）',
+  // 圖文選單其他按鈕的回覆：左邊是按鈕送出的文字，右邊是機器人回覆的內容（\n 是換行，可以放網址）
+  REPLIES: {
+    '臨打團': '🏸 臨打團\n📅 時間：（請填寫）\n📍 地點：（請填寫）\n💰 費用：（請填寫）\n✍️ 報名方式：（請填寫）',
+    '羽技非凡教學': '🏸 羽技非凡教學\n📚 課程內容：（請填寫）\n📅 上課時間：（請填寫）\n💰 費用：（請填寫）\n✍️ 報名方式：（請填寫）',
+  },
 };
 
 // ----------------------------------------------------------------------------
@@ -187,6 +192,11 @@ function handleLineEvent(ev) {
   if (phone && (!cust || rebinding)) {
     reply(ev.replyToken, bindPhone(uid, phone));
     cache.remove('rebind:' + uid);
+    return;
+  }
+
+  if (CONFIG.REPLIES && Object.prototype.hasOwnProperty.call(CONFIG.REPLIES, text)) {
+    reply(ev.replyToken, CONFIG.REPLIES[text]);
     return;
   }
 

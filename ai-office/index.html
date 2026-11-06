@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>我的 AI 辦公室</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap">
+<style>
+/* Layout: 等角俯視的辦公室模型佔滿上半部，可拖曳縮放；下方是成員名冊（每位成員＝一段對話）。 */
+:root{
+  --bg:#f3ede4; --card:#fffcf7; --ink:#2e2621; --muted:#7b6a5b; --line:#e4d8c7;
+  --brass:#b38a45; --walnut:#6b4a33; --chip:#2e2621; --chip-ink:#fff;
+  --ok:#7f9d5e; --wait:#d9962f; --busy:#c79a3f;
+  --stage:#efe6d8;
+  --display:"Noto Serif TC", "Songti TC", serif;
+  --body:"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1e1915; --card:#29221d; --ink:#f1e7da; --muted:#b5a391; --line:#3e342c;
+  --brass:#d4ae68; --walnut:#c79b74; --chip:#f1e7da; --chip-ink:#2e2621;
+  --ok:#9dbb7a; --wait:#e8ac4b; --busy:#d9b062; --stage:#2b241e; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#1e1915; --card:#29221d; --ink:#f1e7da; --muted:#b5a391; --line:#3e342c;
+  --brass:#d4ae68; --walnut:#c79b74; --chip:#f1e7da; --chip-ink:#2e2621;
+  --ok:#9dbb7a; --wait:#e8ac4b; --busy:#d9b062; --stage:#2b241e; color-scheme:dark }
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6}
+.wrap{max-width:1240px;margin:0 auto;padding-block:20px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
+  display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px}
+h1{font-family:var(--display);font-size:clamp(26px,4vw,38px);margin:0;letter-spacing:.04em;text-wrap:balance}
+.sub{margin:2px 0 0;color:var(--muted);font-size:14px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.stage{position:relative;border-radius:18px;overflow:hidden;background:var(--stage);
+  border:1px solid var(--line);aspect-ratio:61/50;max-width:100%;max-height:82vh;width:100%;touch-action:none;
+  box-shadow:0 18px 40px -28px rgba(70,45,20,.55)}
+.stage svg{width:100%;height:100%;display:block;cursor:grab;user-select:none;-webkit-user-select:none}
+.stage svg.drag{cursor:grabbing}
+.ctrl{position:absolute;right:12px;bottom:12px;display:flex;gap:6px}
+.ctrl button{width:38px;height:38px;border-radius:12px;border:1px solid rgba(80,55,30,.18);
+  background:rgba(255,252,246,.92);color:#2e2621;font:600 18px/1 var(--body);cursor:pointer}
+.ctrl button.wide{width:auto;padding:0 12px;font-size:13px}
+.ctrl button:focus-visible,.member:focus-visible,.close:focus-visible,.open:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+.hint{position:absolute;left:12px;bottom:14px;font-size:12px;color:#7b6a5b;background:rgba(255,252,246,.85);
+  padding:4px 10px;border-radius:999px}
+/* svg interactive bits */
+.pp,.tag{cursor:pointer}
+.pp.sel{filter:drop-shadow(0 0 3px #f2c86b) drop-shadow(0 0 6px #f2c86b)}
+.tag.sel rect{fill:#8a6233}
+.pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.td{animation:td 1.2s ease-in-out infinite}
+.td:nth-child(3){animation-delay:.2s}.td:nth-child(4){animation-delay:.4s}
+@keyframes td{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-2px)}}
+.led{animation:led 2.4s steps(2) infinite}
+.led:nth-child(3n){animation-delay:.7s}.led:nth-child(4n){animation-delay:1.3s}
+@keyframes led{50%{opacity:.25}}
+.steam{animation:steam 3s ease-in-out infinite;opacity:0}
+.steam:nth-child(2){animation-delay:1.4s}
+@keyframes steam{0%{opacity:0;transform:translateY(0)}40%{opacity:.6}100%{opacity:0;transform:translateY(-9px)}}
+@media (prefers-reduced-motion: reduce){.pulse,.td,.led,.steam{animation:none}.steam{opacity:.4}}
+/* roster */
+h2{font-family:var(--display);font-size:20px;margin:6px 0 0;letter-spacing:.04em}
+.roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.member{all:unset;box-sizing:border-box;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:start;
+  background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;min-width:0}
+.member:hover{border-color:var(--brass)}
+.member.sel{border-color:var(--brass);box-shadow:0 0 0 2px color-mix(in srgb,var(--brass) 35%,transparent)}
+.av{width:46px;height:46px;border-radius:12px;background:#efe3cf;grid-row:span 3;display:grid;place-items:center;overflow:hidden}
+.av svg{width:46px;height:46px}
+.dept{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.chip{background:var(--chip);color:var(--chip-ink);font-size:12px;padding:1px 10px;border-radius:999px;letter-spacing:.06em}
+.st{font-size:12px;display:inline-flex;align-items:center;gap:5px;color:var(--muted)}
+.mt{font-weight:700;font-size:15px;min-width:0;overflow-wrap:anywhere}
+.ms{font-size:13px;color:var(--muted);min-width:0;overflow-wrap:anywhere;grid-column:2}
+/* detail sheet */
+.sheet{position:fixed;z-index:20;right:max(18px, calc(env(safe-area-inset-right, 0px) + 18px));bottom:max(18px, calc(env(safe-area-inset-bottom, 0px) + 18px));
+  width:min(360px, calc(100vw - 32px));background:var(--card);color:var(--ink);border:1px solid var(--line);
+  border-radius:18px;padding:18px;box-shadow:0 24px 60px -20px rgba(40,25,10,.45);display:grid;gap:10px}
+.sheet .top{display:flex;gap:12px;align-items:center}
+.sheet .av{grid-row:auto;width:58px;height:58px}.sheet .av svg{width:58px;height:58px}
+.sheet h3{margin:0;font-size:18px;font-family:var(--display);overflow-wrap:anywhere}
+.sheet p{margin:0;font-size:14px}
+.meta{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.close{position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:10px;border:0;background:transparent;color:var(--muted);font-size:20px;cursor:pointer}
+.open{display:inline-flex;justify-self:start;align-items:center;gap:6px;background:var(--chip);color:var(--chip-ink);
+  text-decoration:none;font-size:14px;padding:8px 14px;border-radius:999px}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+@media (max-width:640px){
+  .stage{aspect-ratio:auto;height:68vh}
+  .sheet{left:max(16px, env(safe-area-inset-left, 0px));right:max(16px, env(safe-area-inset-right, 0px));width:auto;bottom:max(12px, env(safe-area-inset-bottom, 0px))}
+  .hint{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>我的 AI 辦公室</h1>
+      <p class="sub">每位同事都是你的一段對話。點小人或名牌，看看他們最近在忙什麼。</p>
+    </div>
+    <div class="legend" aria-label="狀態說明">
+      <span><i class="dot" style="background:var(--ok)"></i>已完成</span>
+      <span><i class="dot" style="background:var(--wait)"></i>等你回覆</span>
+      <span><i class="dot" style="background:var(--busy)"></i>進行中</span>
+      <span>★ 已釘選</span>
+    </div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="scene" role="img" aria-label="等角俯視的 AI 辦公室：上方中央是主管辦公室，左右各四個部門，中央圓形平台上有旋轉的線框方塊，下方是會議室、休息區與茶水間"></svg>
+    <div class="hint">拖曳移動・滾輪或雙指縮放</div>
+    <div class="ctrl">
+      <button type="button" id="zin" aria-label="放大">＋</button>
+      <button type="button" id="zout" aria-label="縮小">－</button>
+      <button type="button" id="zreset" class="wide">全景</button>
+    </div>
+  </div>
+
+  <h2>成員名冊</h2>
+  <div class="roster" id="roster"></div>
+  <p class="note">名冊依 2026/11/06 的對話清單建立。之後有新對話，跟我說一聲就幫你安排新座位。</p>
+</div>
+
+<div class="sheet" id="sheet" hidden role="dialog" aria-labelledby="sh-title">
+  <button type="button" class="close" id="sh-close" aria-label="關閉">×</button>
+  <div class="top"><div class="av" id="sh-av"></div><div><div class="dept" id="sh-dept"></div><h3 id="sh-title"></h3></div></div>
+  <p id="sh-sum"></p>
+  <div class="meta" id="sh-meta"></div>
+  <a class="open" id="sh-link" target="_blank" rel="noopener">開啟這段對話 ↗</a>
+</div>
+
+<script>
+(()=>{
+/* ───────── 成員資料（每位＝一段對話） ───────── */
+const ST={done:{t:'已完成',c:'#86a865'},blocked:{t:'等你回覆',c:'#e3a13b'},working:{t:'進行中',c:'#e2b24f'}};
+const MEMBERS=[
+ {id:'m1',dept:'研究部',item:'research',name:'書籍閱讀',title:'書籍閱讀理解',status:'done',updated:'11/05 14:54',pin:0,
+  sum:'把《穿線師年鑑》整理成技能包 stringer-yearbook：重點筆記、全書原文，還有羽球小學堂的系列規劃。',
+  sid:'session_01NqhGXAmsKh9rNg3yeAafz1',shirt:'#8c6a4f',hair:'#3b2a20',style:'long',acc:'glasses',rug:'#e8d6bd'},
+ {id:'m2',dept:'財務部',item:'finance',name:'航運AI股',title:'航運和 AI 產業股市分析',status:'blocked',updated:'11/04 16:31',pin:0,
+  sum:'每天的股市分析有幾個資料來源連不上。在等你決定：改查證交所、鉅亨網等來源，或放寬網路限制。',
+  sid:'session_01NqhGX9WFwPKUQUQMMyxg1y',shirt:'#4f5a48',hair:'#2a211c',style:'short',acc:'tie',rug:'#e3d7c2'},
+ {id:'m3',dept:'品管部',item:'qc',name:'標籤機APP',title:'標籤機 APP',status:'done',updated:'11/06 20:18',pin:1,
+  sum:'標籤的線種與磅數改成同一行並已上線；試算表加了通知取拍選單，貼上新程式並重新部署後生效。',
+  sid:'session_01NqhGX9jkJB9tykADxZwrxn',shirt:'#c9774f',hair:'#4a3326',style:'bun',acc:'',rug:'#eadcc6'},
+ {id:'m4',dept:'數據部',item:'data',name:'試算表連動',title:'Google 試算表連動應用',status:'done',updated:'11/06 11:53',pin:1,
+  sum:'名字後面接數字會自動歸到本人（好炒1~4 → 好炒×4）。安裝頁已更新，要重貼 Index.html 並部署新版本。',
+  sid:'session_01NqhGX7dP1hfyBLpLfhr6F3',shirt:'#7d8f5a',hair:'#30241d',style:'short2',acc:'',rug:'#e4dac4'},
+ {id:'m5',dept:'設計部',item:'design',name:'AI辦公室',title:'AI 辦公室設計',status:'working',updated:'11/06 進行中',pin:0,
+  sum:'就是現在這段對話。正在把你的每段對話安排進這間木質調辦公室。',
+  sid:'session_01NqhGX9w5g1PZRWZLVX42bE',shirt:'#d9a441',hair:'#5a3a26',style:'pony',acc:'',rug:'#ecdcc0'},
+ {id:'m6',dept:'翻譯部',item:'translate',name:'卡帶中文化',title:'Nintendo 卡帶遊戲日文改繁體中文',status:'done',updated:'11/04 15:04',pin:0,
+  sum:'對話框改成 16×16 大字並打包給你試玩。戰鬥畫面還沒測，全劇情翻譯等你確認後開始。',
+  sid:'session_01NqhGX8iydpfdwfUngcTHgd',shirt:'#b56b6b',hair:'#2b201a',style:'long',acc:'',rug:'#ead8c8'},
+ {id:'m7',dept:'社群部',item:'social',name:'社群連結',title:'社群連結整理程式',status:'done',updated:'11/03 19:06',pin:0,
+  sum:'收藏只存在你自己的裝置、不會上傳；PR #1 沒有衝突，可以直接合併。',
+  sid:'session_01NqhGX8pfSJat2PerEFwqZx',shirt:'#a0785a',hair:'#3f2c22',style:'bun',acc:'',rug:'#e6d8c3'},
+ {id:'m8',dept:'資訊部',item:'it',name:'雲端同步',title:'雲端對話同步',status:'done',updated:'10/31 13:07',pin:0,
+  sum:'這台電腦已開啟 Remote Control，電腦開著時可以用手機上的 Claude App 接著聊。',
+  sid:'session_01NqhGXACGjPoPvS2zoSkGh5',shirt:'#6f6a5e',hair:'#211a16',style:'short',acc:'headset',rug:'#e2d8c8'},
+];
+const BOSS={id:'boss',dept:'主管辦公室',name:'我',title:'你（老闆）',status:'done',updated:'',pin:0,
+  sum:'整間辦公室的主人。每個部門都是你開過的一段對話，有事就找他們。',sid:'',shirt:'#3b3330',hair:'#2a201b',style:'short',acc:'tie',boss:1};
+const ALL=[BOSS,...MEMBERS];
+const byId=Object.fromEntries(ALL.map(m=>[m.id,m]));
+
+/* ───────── 投影 ───────── */
+const S=20, TH=30*Math.PI/180, EL=50*Math.PI/180;
+const cT=Math.cos(TH), sT=Math.sin(TH), sE=Math.sin(EL), cE=Math.cos(EL);
+const P=(x,y,z=0)=>[(x*cT-y*sT)*S, ((x*sT+y*cT)*sE - z*cE)*S];
+const f=n=>Math.round(n*10)/10;
+const pts=a=>a.map(p=>f(p[0])+','+f(p[1])).join(' ');
+const poly=(a,fill,ex='')=>`<polygon points="${pts(a)}" fill="${fill}" ${ex}/>`;
+const line=(a,b,st,w=.6,ex='')=>`<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="${st}" stroke-width="${w}" ${ex}/>`;
+function shade(hex,k){const n=parseInt(hex.slice(1),16);const r=n>>16,g=n>>8&255,b=n&255;
+  const m=v=>Math.max(0,Math.min(255,Math.round(k>=1?v+(255-v)*(k-1):v*k)));
+  return '#'+((1<<24)+(m(r)<<16)+(m(g)<<8)+m(b)).toString(16).slice(1);}
+let seed=7;const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
+
+/* 色票 */
+const C={wall:'#f4eee4',oak:'#e4cb9f',oakL:'#ecd7b2',wal:'#76523a',wal2:'#8a6447',brass:'#c9a45c',brassD:'#a7823f',
+  black:'#2c2a29',cream:'#f6f0e6',stone:'#dcd5ca',green:'#6f8a5b',orange:'#dc8a4c',city:'#c4c1bb'};
+
+let main=[], city=[], floorDeco='', shadows='', rugs='', overlay='', tags=[];
+function box(o,list=main){
+  const {x,y,z=0,w,d,h,c}=o, x2=x+w,y2=y+d,z2=z+h;
+  const top=[P(x,y,z2),P(x2,y,z2),P(x2,y2,z2),P(x,y2,z2)];
+  const fr=[P(x,y2,z),P(x2,y2,z),P(x2,y2,z2),P(x,y2,z2)];
+  const rt=[P(x2,y,z),P(x2,y2,z),P(x2,y2,z2),P(x2,y,z2)];
+  const ex=`stroke="${o.st||'rgba(70,45,25,.2)'}" stroke-width="${o.sw||.6}" stroke-linejoin="round"${o.op!=null?` fill-opacity="${o.op}"`:''}`;
+  let s=poly(fr,o.cf||shade(c,.9),ex)+poly(rt,o.cr||shade(c,.76),ex)+poly(top,o.ct||c,ex);
+  if(o.deco) s+=o.deco({F:(u,v)=>P(x+u,y2,z+v),R:(u,v)=>P(x2,y+u,z+v),T:(u,v)=>P(x+u,y+v,z2),w,d,h});
+  if(o.sh&&z<.05) addShadow(x,y,w,d,h);
+  const it={bb:[x,y,z,x2,y2,z2],svg:s}; list.push(it); return it;
+}
+function addShadow(x,y,w,d,h){const k=Math.min(h,3),dx=k*.38,dy=k*.2;
+  shadows+=poly([P(x,y),P(x+w,y),P(x+w+dx,y+dy),P(x+w+dx,y+d+dy),P(x+dx,y+d+dy),P(x,y+d)],'#4a3018');}
+function ellipseAt(cx,cy,z,r,fill,ex=''){const [a,b]=P(cx,cy,z);return `<ellipse cx="${f(a)}" cy="${f(b)}" rx="${f(r*S)}" ry="${f(r*S*sE)}" fill="${fill}" ${ex}/>`;}
+function cylSvg(o){const {cx,cy,r,z=0,h,c}=o;const [bx,by]=P(cx,cy,z),[tx,ty]=P(cx,cy,z+h);const R=r*S,Ry=R*sE,side=o.cs||shade(c,.8);
+  return `<ellipse cx="${f(bx)}" cy="${f(by)}" rx="${f(R)}" ry="${f(Ry)}" fill="${side}"/>`+
+  `<rect x="${f(bx-R)}" y="${f(ty)}" width="${f(2*R)}" height="${f(by-ty)}" fill="${side}"/>`+
+  `<ellipse cx="${f(tx)}" cy="${f(ty)}" rx="${f(R)}" ry="${f(Ry)}" fill="${c}" stroke="${o.st||'rgba(70,45,25,.18)'}" stroke-width="${o.sw||.6}"/>`;}
+function cyl(o,list=main){let s=cylSvg(o);if(o.extra)s+=o.extra(P(o.cx,o.cy,(o.z||0)+o.h));
+  if(o.sh&&!(o.z>.05)) shadows+=ellipseAt(o.cx+o.h*.25,o.cy+o.h*.12,0,o.r*1.05,'#4a3018');
+  const it={bb:[o.cx-o.r,o.cy-o.r,o.z||0,o.cx+o.r,o.cy+o.r,(o.z||0)+o.h],svg:s};list.push(it);return it;}
+function item(bb,svg,list=main){const it={bb,svg};list.push(it);return it;}
+
+/* 裝飾 */
+const BOOK=['#a8573c','#d7b46a','#6f7d55','#e9dcc3','#7c4a35','#b98a5a','#59614c','#c98b6b','#efe5d2'];
+const shelves=rows=>({F,w,h})=>{let s='';const n=rows||4,gap=h/n;
+  for(let r=0;r<n;r++){const v0=r*gap+.08;s+=line(F(.06,v0),F(w-.06,v0),'#4d3424',1.1);
+    if(r===n-1)break;let u=.14;while(u<w-.25){const bw=.09+rnd()*.1,bh=gap*(.55+rnd()*.3);
+      if(rnd()<.12){u+=.22;continue;}
+      s+=poly([F(u,v0+.03),F(u+bw,v0+.03),F(u+bw,v0+bh),F(u,v0+bh)],BOOK[(rnd()*BOOK.length)|0]);u+=bw+.015;}}
+  return s;};
+const drawers=n=>({F,w,h})=>{let s='';for(let i=1;i<n;i++)s+=line(F(.05,h*i/n),F(w-.05,h*i/n),'rgba(40,25,15,.45)',.8);
+  for(let i=0;i<n;i++){const v=h*(i+.62)/n;s+=line(F(w*.38,v),F(w*.62,v),C.brass,1.6,'stroke-linecap="round"');}return s;};
+const slats=(step=.2,col='rgba(70,45,25,.35)')=>({F,w,h})=>{let s='';for(let u=step;u<w;u+=step)s+=line(F(u,0),F(u,h),col,.8);return s;};
+const slatsR=(step=.2,col='rgba(70,45,25,.35)')=>({R,d,h})=>{let s='';for(let u=step;u<d;u+=step)s+=line(R(u,0),R(u,h),col,.8);return s;};
+
+function plant(cx,cy,s=1,kind=0){
+  const r=.3*s,h=.55*s;let svg=cylSvg({cx,cy,r,h,c:kind===2?'#c98a5e':'#ece3d4',cs:kind===2?'#b0734b':'#d9cdb9'});
+  const [tx,ty]=P(cx,cy,h);const k=S*s;
+  if(kind===1){ // 虎尾蘭
+    const cols=['#5f8a4a','#7aa25a','#4f7a3e'];
+    [[-.18,-1.3,-.12],[.02,-1.55,0],[.2,-1.2,.1],[-.05,-1.05,-.05],[.12,-1.4,.06]].forEach((l,i)=>{
+      svg+=`<path d="M${f(tx+l[0]*k-2.2)},${f(ty)} Q${f(tx+(l[0]+l[2])*k)},${f(ty+l[1]*k*.6)} ${f(tx+(l[0]+l[2]*2)*k)},${f(ty+l[1]*k)} Q${f(tx+(l[0]+l[2])*k+1)},${f(ty+l[1]*k*.6)} ${f(tx+l[0]*k+2.2)},${f(ty)}Z" fill="${cols[i%3]}"/>`;});
+  } else {
+    const cols=['#6f9a52','#86ad62','#5b8445','#94b86d'];
+    [[0,-.95,.36],[-.32,-.62,.32],[.32,-.66,.32],[-.16,-.3,.3],[.2,-.32,.3],[0,-.55,.3],[0,-1.2,.22]].forEach((o,i)=>{
+      svg+=`<circle cx="${f(tx+o[0]*k)}" cy="${f(ty+o[1]*k)}" r="${f(o[2]*k)}" fill="${cols[i%4]}"/>`;});
+    svg+=`<circle cx="${f(tx-.1*k)}" cy="${f(ty-1.05*k)}" r="${f(.1*k)}" fill="#a9c985" opacity=".8"/>`;
+  }
+  shadows+=ellipseAt(cx+.2,cy+.1,0,r*1.4,'#4a3018');
+  item([cx-r,cy-r,0,cx+r,cy+r,h+1.3*s],svg);
+}
+function planter(x,y,w,d,axis){ // 窗邊花槽
+  box({x,y,w,d,h:.7,c:C.wal2,sh:1,deco:({T})=>{let s='';const n=Math.round((axis==='y'?d:w)/.32);
+    for(let i=0;i<n;i++){const t=(i+.5)/n;const p=axis==='y'?T(w/2,d*t):T(w*t,d/2);
+      s+=`<circle cx="${f(p[0]+(rnd()-.5)*3)}" cy="${f(p[1]-3)}" r="${f(4+rnd()*2.5)}" fill="${['#6f9a52','#86ad62','#5b8445'][i%3]}"/>`;
+      if(i%2===0)s+=`<circle cx="${f(p[0]+(rnd()-.5)*4)}" cy="${f(p[1]-6-rnd()*3)}" r="2" fill="${['#f2c46b','#e9927a','#fff4e0','#e7a3b0'][i%4]}"/>`;}
+    return s;}});
+}
+function rugRect(x,y,w,d,col,border){rugs+=poly([P(x,y),P(x+w,y),P(x+w,y+d),P(x,y+d)],col);
+  if(border){const i=.3;rugs+=poly([P(x+i,y+i),P(x+w-i,y+i),P(x+w-i,y+d-i),P(x+i,y+d-i)],'none',`stroke="${border}" stroke-width="1.2"`);}}
+function rugCircle(cx,cy,r,col,border){rugs+=ellipseAt(cx,cy,0,r,col);if(border)rugs+=ellipseAt(cx,cy,0,r-.28,'none',`stroke="${border}" stroke-width="1.2"`);}
+
+/* 椅子＋人 */
+function officeChair(cx,cy,face=1){ // face=1 面向 +y（看向觀眾）
+  cyl({cx,cy:cy,r:.42,h:.06,c:'#3a3735'});
+  cyl({cx,cy,r:.08,z:.06,h:.48,c:'#6d6863'});
+  box({x:cx-.6,y:cy-.55,z:.54,w:1.2,d:1.1,h:.3,c:C.black,sh:0});
+  box({x:cx-.55,y:cy-.82,z:.7,w:1.1,d:.24,h:1.75,c:C.black});
+}
+function person(m,cx,cy,z,scale=1){
+  const [hx,hy]=P(cx,cy,z);const k=S/22*scale;
+  item([cx-.45,cy-.3,z,cx+.45,cy+.3,z+2.0],`<g class="pp" data-id="${m.id}" transform="translate(${f(hx)},${f(hy)}) scale(${k.toFixed(3)})">${chibi(m)}</g>`);
+  tags.push({m,x:hx,y:hy-52*k});
+}
+function chibi(m,bubble=true){
+  const sh=m.shirt, hr=m.hair; let s='';
+  s+=`<ellipse cx="-9.2" cy="-7" rx="3.2" ry="6.4" fill="${shade(sh,.85)}"/><ellipse cx="9.2" cy="-7" rx="3.2" ry="6.4" fill="${shade(sh,.85)}"/>`;
+  s+=`<path d="M-9,0 Q-10.5,-15 -6,-17.5 L6,-17.5 Q10.5,-15 9,0 Z" fill="${sh}"/>`;
+  s+=`<path d="M-4.2,-17.5 L0,-12.5 L4.2,-17.5 Z" fill="#fbf6ee"/>`;
+  if(m.acc==='tie') s+=`<path d="M0,-14 L-1.8,-11 L0,-4 L1.8,-11 Z" fill="${m.boss?'#b4483a':'#c9a45c'}"/>`;
+  if(m.style==='long') s+=`<path d="M-13.6,-31 C-15.5,-18 -14,-12 -9.5,-11 L-8,-26 Z M13.6,-31 C15.5,-18 14,-12 9.5,-11 L8,-26 Z" fill="${hr}"/>`;
+  s+=`<circle cy="-30" r="13" fill="#f7dcc4" stroke="rgba(120,80,50,.15)" stroke-width=".6"/>`;
+  const hairTop={short:`M-13.8,-28 C-15.5,-47 15.5,-47 13.8,-28 C12,-35 7,-38.5 1.5,-36.8 C-3,-39 -9.5,-36.5 -13.8,-28Z`,
+    short2:`M-13.8,-27 C-15.5,-48 15.5,-48 13.8,-27 C11,-33 3,-37.5 -3,-35 C-7,-36.5 -11,-33 -13.8,-27Z`,
+    long:`M-13.9,-27 C-15.5,-47 15.5,-47 13.9,-27 C11.5,-35 4,-37.5 0,-34.5 C-4,-37.5 -11.5,-35 -13.9,-27Z`,
+    bun:`M-13.8,-28 C-15.5,-47 15.5,-47 13.8,-28 C10,-36 -1,-38 -6,-35 C-9,-35.5 -12.5,-32 -13.8,-28Z`,
+    pony:`M-13.8,-28 C-15.5,-47 15.5,-47 13.8,-28 C11,-35 5,-38 0,-36 C-5,-38 -11,-35 -13.8,-28Z`}[m.style]||'';
+  if(m.style==='bun') s+=`<circle cx="0" cy="-45" r="5.6" fill="${hr}"/>`;
+  if(m.style==='pony') s+=`<path d="M10,-40 C19,-40 19,-26 14,-20 C16,-28 14,-34 9,-35Z" fill="${hr}"/>`;
+  s+=`<path d="${hairTop}" fill="${hr}"/>`;
+  s+=`<ellipse cx="-5" cy="-27.5" rx="1.8" ry="2.2" fill="#2b211c"/><ellipse cx="5" cy="-27.5" rx="1.8" ry="2.2" fill="#2b211c"/>`;
+  s+=`<circle cx="-4.4" cy="-28.4" r=".65" fill="#fff"/><circle cx="5.6" cy="-28.4" r=".65" fill="#fff"/>`;
+  s+=`<ellipse cx="-8.6" cy="-23.6" rx="2.4" ry="1.4" fill="#f2a08a" opacity=".55"/><ellipse cx="8.6" cy="-23.6" rx="2.4" ry="1.4" fill="#f2a08a" opacity=".55"/>`;
+  s+=`<path d="M-2,-22.6 Q0,-20.6 2,-22.6" stroke="#8a4b3a" stroke-width="1.1" fill="none" stroke-linecap="round"/>`;
+  if(m.acc==='glasses') s+=`<g fill="none" stroke="#6b4a33" stroke-width=".9"><circle cx="-5" cy="-27.5" r="3.4"/><circle cx="5" cy="-27.5" r="3.4"/><path d="M-1.6,-27.8 L1.6,-27.8"/></g>`;
+  if(m.acc==='headset') s+=`<path d="M-13.5,-30 C-13.5,-46 13.5,-46 13.5,-30" stroke="#3a3633" stroke-width="2" fill="none"/><rect x="-15.6" y="-33" width="4" height="7" rx="2" fill="#3a3633"/><rect x="11.6" y="-33" width="4" height="7" rx="2" fill="#3a3633"/><path d="M-13.5,-27 Q-12,-20 -5,-20.5" stroke="#3a3633" stroke-width="1.2" fill="none"/>`;
+  if(bubble&&m.status==='blocked') s+=`<g transform="translate(15,-46)"><circle r="5.8" fill="#e3a13b"/><path d="M-2,4.5 L-4.5,8 L1,5Z" fill="#e3a13b"/><text y="3" font-size="8.5" font-weight="700" text-anchor="middle" fill="#fff" font-family="sans-serif">!</text></g>`;
+  if(bubble&&m.status==='working') s+=`<g transform="translate(16,-47)"><rect x="-9" y="-5.5" width="18" height="11" rx="5.5" fill="#fffaf0" stroke="#d9c39f" stroke-width=".7"/><circle class="td" cx="-4.4" r="1.4" fill="#8a6a4a"/><circle class="td" cx="0" r="1.4" fill="#8a6a4a"/><circle class="td" cx="4.4" r="1.4" fill="#8a6a4a"/></g>`;
+  return s;
+}
+function avatar(m){return `<svg viewBox="-20 -52 40 46" aria-hidden="true">${chibi(m,false)}</svg>`;}
+
+/* 辦公桌組 */
+function deskSet(m,X,oy,o={}){
+  const dx=o.dx||3.6, dw=o.dw||4.8, cx=o.cx||6, dy=o.dy||2.95, dd=o.dd||1.3;
+  officeChair(X(cx),oy+dy-.65);
+  person(m,X(cx),oy+dy-.65,.84,o.scale||1.15);
+  box({x:X(dx,dw),y:oy+dy,w:dw,d:dd,h:1.25,c:C.wal,ct:'#8a6447',sh:1,deco:({F,w})=>line(F(.05,1.12),F(w-.05,1.12),C.brass,1.1)});
+  const mons=o.mons||[[dx+.25,1.4],[dx+dw-1.65,1.4]];
+  mons.forEach(([mx,mw])=>{const xx=X(mx,mw);
+    cyl({cx:xx+mw/2,cy:oy+dy+.3,r:.07,z:1.25,h:.28,c:C.brassD});
+    box({x:xx,y:oy+dy+.2,z:1.53,w:mw,d:.1,h:.82,c:'#34302d',cf:'#2a2725',deco:({F,w})=>`<circle cx="${f(F(w/2,.41)[0])}" cy="${f(F(w/2,.41)[1])}" r="1.1" fill="#6b625a"/>`});});
+  box({x:X(cx-.55,1.1),y:oy+dy+.55,z:1.25,w:1.1,d:.35,h:.05,c:'#e9e2d7'});
+  cyl({cx:X(o.mug||dx+dw-.4),cy:oy+dy+.95,r:.12,z:1.25,h:.2,c:'#fbf6ee'});
+}
+
+/* 部門房間 */
+function deptRoom(m,ox,oy,mir){
+  const X=(lx,w=0)=>mir?ox+12-lx-w:ox+lx;
+  const B=(lx,ly,z,w,d,h,o={})=>box({x:X(lx,w),y:oy+ly,z,w,d,h,...o});
+  rugRect(X(3,6.2),oy+1.2,6.2,4.6,m.rug,'rgba(150,110,70,.25)');
+  planter(X(.12,.72),oy+1.4,.72,4.3,'y');
+  B(1.05,.12,0,2.6,.8,3.0,{c:C.wal2,cf:'#6e4c35',sh:1,deco:shelves(4)});
+  B(9.4,.12,0,1.35,.85,1.9,{c:'#efe7da',sh:1,deco:drawers(3)});
+  deskSet(m,X,oy);
+  plant(X(2.4),oy+6.0,1,(oy/7)%2?1:0);
+  const it=m.item;
+  if(it==='research'){
+    B(9.2,2.7,0,2.2,1.1,1.0,{c:C.wal2,sh:1});
+    [[9.45,.75,'#a8573c'],[9.5,.65,'#d7b46a'],[9.42,.7,'#6f7d55']].forEach((b,i)=>B(b[0],2.85,1.0+i*.17,b[1],.5,.17,{c:b[2]}));
+    const gx=X(10.75),gy=oy+3.25;cyl({cx:gx,cy:gy,r:.22,z:1,h:.08,c:C.brass});cyl({cx:gx,cy:gy,r:.04,z:1.08,h:.3,c:C.brassD});
+    const [sx,sy]=P(gx,gy,1.85),R=.48*S;
+    item([gx-.48,gy-.48,1.38,gx+.48,gy+.48,2.33],`<circle cx="${f(sx)}" cy="${f(sy)}" r="${f(R)}" fill="#e6cf9a"/><path d="M${f(sx-R*.6)},${f(sy-R*.3)} q${f(R*.3)},${f(-R*.4)} ${f(R*.6)},${f(-R*.1)} t${f(R*.3)},${f(R*.4)} q${f(-R*.3)},${f(R*.5)} ${f(-R*.7)},${f(R*.2)}Z M${f(sx+R*.1)},${f(sy+R*.3)} q${f(R*.4)},${f(-R*.2)} ${f(R*.5)},${f(R*.2)} q${f(-R*.2)},${f(R*.3)} ${f(-R*.5)},${f(R*.1)}Z" fill="#8ea164"/><ellipse cx="${f(sx)}" cy="${f(sy)}" rx="${f(R*1.12)}" ry="${f(R*1.12)}" fill="none" stroke="${C.brass}" stroke-width="1.4" transform="rotate(-25 ${f(sx)} ${f(sy)}) scale(1) "/><circle cx="${f(sx-R*.35)}" cy="${f(sy-R*.4)}" r="${f(R*.2)}" fill="#fff" opacity=".35"/>`);
+  }
+  if(it==='finance'){
+    B(10.8,.12,0,1.05,.85,2.4,{c:'#efe7da',sh:1,deco:drawers(4)});
+    B(9.35,3.66,0,.1,.08,.35,{c:C.wal});B(11.35,3.66,0,.1,.08,.35,{c:C.wal});
+    B(9.2,3.6,.35,2.4,.12,2.0,{c:'#fbf8f2',sh:1,deco:({F,w,h})=>{let s='';for(let i=1;i<4;i++)s+=line(F(.15,h*i/4),F(w-.15,h*i/4),'rgba(120,90,60,.2)',.6);
+      const pp=[[.2,.4],[.6,.65],[1.0,.55],[1.4,1.05],[1.8,.95],[2.2,1.6]].map(p=>F(p[0],p[1]));
+      s+=`<polyline points="${pts(pp)}" fill="none" stroke="#b4483a" stroke-width="1.6" stroke-linejoin="round"/>`;
+      [.35,.75,1.15,1.55,1.95].forEach((u,i)=>{const bh=.15+i*.08;s+=poly([F(u,.12),F(u+.18,.12),F(u+.18,.12+bh),F(u,.12+bh)],'#c9a45c');});return s;}});
+    B(4.3,3.35,1.25,.45,.35,.06,{c:'#5c5650'});
+  }
+  if(it==='qc'){
+    B(9.0,2.55,0,2.7,1.25,1.05,{c:'#efe7da',sh:1,deco:drawers(2)});
+    B(9.15,2.7,1.05,1.05,.7,.62,{c:'#e6dfd3',deco:({F,w})=>poly([F(.12,.18),F(w-.12,.18),F(w-.12,.5),F(.12,.5)],'#3a332e')+line(F(.2,.3),F(.5,.42),'#f2b85b',1.2)+line(F(.5,.42),F(.8,.28),'#f2b85b',1.2)});
+    const [mx,my]=P(X(10.95),oy+3.1,1.05),k=S/22;
+    item([X(10.95)-.35,oy+2.8,1.05,X(10.95)+.35,oy+3.4,2.1],`<g transform="translate(${f(mx)},${f(my)}) scale(${k.toFixed(3)})"><ellipse rx="7" ry="3" fill="#3b3330"/><rect x="-1.6" y="-15" width="3.2" height="15" rx="1" fill="#d8d0c2"/><rect x="-5.5" y="-7.5" width="11" height="1.8" fill="${C.brass}"/><path d="M-1,-15 L5,-26 L8.5,-24 L2.5,-13Z" fill="#efe9de" stroke="#8b7b66" stroke-width=".6"/><circle cx="6.8" cy="-25" r="1.6" fill="#3b3330"/></g>`);
+    B(3.75,3.3,1.25,.6,.45,.3,{c:'#fbfaf7',deco:({F,w})=>poly([F(.12,.08),F(w-.12,.08),F(w-.12,.11),F(.12,.11)],'#2e2621')});
+  }
+  if(it==='data'){
+    B(9.35,3.66,0,.1,.08,.35,{c:C.wal});B(11.35,3.66,0,.1,.08,.35,{c:C.wal});
+    B(9.2,3.6,.35,2.4,.12,2.0,{c:'#fbf8f2',sh:1,deco:({F,w,h})=>{let s='';
+      for(let i=0;i<=5;i++)s+=line(F(.15,.15+i*.32),F(1.25,.15+i*.32),'rgba(110,80,50,.35)',.6);
+      for(let j=0;j<=3;j++)s+=line(F(.15+j*.367,.15),F(.15+j*.367,1.75),'rgba(110,80,50,.35)',.6);
+      s+=poly([F(.15,1.43),F(1.25,1.43),F(1.25,1.75),F(.15,1.75)],'rgba(127,157,94,.45)');
+      [[1.45,.5],[1.72,.85],[1.99,.65],[2.26,1.2]].forEach(([u,bh],i)=>s+=poly([F(u,.15),F(u+.18,.15),F(u+.18,.15+bh),F(u,.15+bh)],i===3?'#7f9d5e':'#c9a45c'));return s;}});
+  }
+  if(it==='design'){
+    const x1=X(9.2,2.2),y1=oy+2.6;box({x:x1+.15,y:y1+.15,w:1.9,d:.9,h:.9,c:C.wal2,sh:1});
+    const q=[P(x1,y1,1.6),P(x1+2.2,y1,1.6),P(x1+2.2,y1+1.2,1.0),P(x1,y1+1.2,1.0)];
+    let s=poly(q,'#fbf7ee','stroke="#a7823f" stroke-width=".8"');
+    const L=(a,b,c2,d2)=>line(P(x1+a,y1+b*1.2,1.6-b*.6),P(x1+c2,y1+d2*1.2,1.6-d2*.6),'#8a6447',.8);
+    s+=L(.3,.25,1.4,.25)+L(.3,.25,.3,.8)+L(.3,.8,1.4,.8)+L(1.4,.25,1.4,.8)+L(.3,.5,1.0,.5)+L(1.0,.25,1.0,.8)+L(1.6,.3,1.95,.7);
+    const [ax,ay]=P(x1+1.75,y1+.35,1.47);s+=`<circle cx="${f(ax)}" cy="${f(ay)}" r="5" fill="none" stroke="${C.brass}" stroke-width="1"/>`;
+    item([x1,y1,.9,x1+2.2,y1+1.2,1.6],s);
+    B(3.8,3.35,1.25,.5,.5,.5,{c:'#f6efe3',op:.5,st:C.brassD,sw:.9});
+  }
+  if(it==='translate'){
+    B(9.1,2.55,0,2.5,1.05,.8,{c:C.wal2,sh:1,deco:drawers(2)});
+    B(9.45,2.7,.8,1.8,.12,1.15,{c:'#2c2826',deco:({F,w,h})=>{let s=poly([F(.08,.1),F(w-.08,.1),F(w-.08,h-.08),F(.08,h-.08)],'#f2e2bf');
+      const p=F(w/2,h/2);s+=`<text x="${f(p[0])}" y="${f(p[1]+3)}" font-size="8" text-anchor="middle" fill="#6b4a33" font-weight="700" font-family="sans-serif">あ→中</text>`;return s;}});
+    [['#b4483a',9.3],['#d7b46a',9.62],['#6f7d55',9.94],['#efe5d2',10.26]].forEach(([c,u])=>B(u,3.15,.8,.26,.32,.06,{c}));
+    B(10.7,3.1,.8,.7,.4,.14,{c:'#ece6dc',deco:({F,w})=>`<circle cx="${f(F(w*.3,.07)[0])}" cy="${f(F(w*.3,.07)[1])}" r="1.2" fill="#b4483a"/>`});
+  }
+  if(it==='social'){
+    B(9.35,3.66,0,.1,.08,.35,{c:C.wal});B(11.35,3.66,0,.1,.08,.35,{c:C.wal});
+    B(9.2,3.6,.35,2.4,.12,1.9,{c:'#c99b68',cf:'#c99b68',sh:1,deco:({F})=>{let s='';const notes=[[.25,1.2,'#fff4dc'],[.95,1.4,'#f6d6c6'],[1.65,1.15,'#e6efd4'],[.55,.45,'#f7e7b4'],[1.45,.5,'#fff4dc']];
+      const pins=notes.map(n=>F(n[0]+.22,n[1]+.36));
+      s+=`<polyline points="${pts([pins[0],pins[3],pins[1],pins[4],pins[2]])}" fill="none" stroke="#b4483a" stroke-width=".9"/>`;
+      notes.forEach((n,i)=>{s+=poly([F(n[0],n[1]),F(n[0]+.45,n[1]),F(n[0]+.45,n[1]+.38),F(n[0],n[1]+.38)],n[2]);s+=`<circle cx="${f(pins[i][0])}" cy="${f(pins[i][1])}" r="1.5" fill="#b4483a"/>`;});return s;}});
+    B(4.4,3.35,1.25,.32,.5,.04,{c:'#2c2a29'});
+  }
+  if(it==='it'){
+    B(9.6,2.45,0,1.5,1.2,3.0,{c:'#3b3734',cf:'#2f2c2a',sh:1,deco:({F,w,h})=>{let s='';for(let i=0;i<7;i++){const v=.25+i*.38;
+      s+=poly([F(.1,v),F(w-.1,v),F(w-.1,v+.28),F(.1,v+.28)],'#46413d');
+      for(let j=0;j<3;j++){const p=F(.22+j*.13,v+.14);s+=`<circle class="led" cx="${f(p[0])}" cy="${f(p[1])}" r="1" fill="${j===2?'#f2b85b':'#a9d07a'}"/>`;}}return s;}});
+  }
+  label(X(6),oy+.5,4.25,m.dept);
+}
+
+/* 玻璃隔間（黃銅細框） */
+const glassAttr='stroke="rgba(255,255,255,.75)" stroke-width=".7"';
+const postSet=new Set();
+function post(x,y){const key=f(x)+','+f(y);if(postSet.has(key))return;postSet.add(key);box({x:x-.06,y:y-.06,z:.1,w:.12,d:.12,h:2.92,c:C.brass,st:'rgba(120,90,40,.3)'});}
+function subtract(a,b,gaps){let segs=[[a,b]];gaps.forEach(([g1,g2])=>{segs=segs.flatMap(([s1,s2])=>g2<=s1||g1>=s2?[[s1,s2]]:[[s1,Math.max(s1,g1)],[Math.min(s2,g2),s2]].filter(s=>s[1]-s[0]>.05));});return segs;}
+function partitionX(x,y1,y2,gaps=[]){
+  subtract(y1,y2,gaps).forEach(([a,b])=>{
+    box({x:x-.05,y:a,w:.1,d:b-a,h:.1,c:C.brass,st:'rgba(120,90,40,.3)'});
+    box({x:x-.05,y:a,z:3.02,w:.1,d:b-a,h:.1,c:C.brass,st:'rgba(120,90,40,.3)'});
+    const n=Math.max(1,Math.round((b-a)/2.4));
+    for(let i=0;i<=n;i++)post(x,a+(b-a)*i/n);
+    for(let i=0;i<n;i++){const p1=a+(b-a)*i/n+.06,p2=a+(b-a)*(i+1)/n-.06;
+      const q=[P(x,p1,.1),P(x,p2,.1),P(x,p2,3.02),P(x,p1,3.02)];
+      const t=p2-p1,hl=[P(x,p1+t*.2,.1),P(x,p1+t*.36,.1),P(x,p1+t*.62,3.02),P(x,p1+t*.46,3.02)];
+      item([x-.02,p1,.1,x+.02,p2,3.02],poly(q,'url(#glass)',glassAttr)+poly(hl,'rgba(255,255,255,.14)'));}
+  });
+}
+function partitionY(y,x1,x2,gaps=[]){
+  subtract(x1,x2,gaps).forEach(([a,b])=>{
+    box({x:a,y:y-.05,w:b-a,d:.1,h:.1,c:C.brass,st:'rgba(120,90,40,.3)'});
+    box({x:a,y:y-.05,z:3.02,w:b-a,d:.1,h:.1,c:C.brass,st:'rgba(120,90,40,.3)'});
+    const n=Math.max(1,Math.round((b-a)/2.4));
+    for(let i=0;i<=n;i++)post(a+(b-a)*i/n,y);
+    for(let i=0;i<n;i++){const p1=a+(b-a)*i/n+.06,p2=a+(b-a)*(i+1)/n-.06;
+      const q=[P(p1,y,.1),P(p2,y,.1),P(p2,y,3.02),P(p1,y,3.02)];
+      const t=p2-p1,hl=[P(p1+t*.2,y,.1),P(p1+t*.36,y,.1),P(p1+t*.62,y,3.02),P(p1+t*.46,y,3.02)];
+      item([p1,y-.02,.1,p2,y+.02,3.02],poly(q,'url(#glass)',glassAttr)+poly(hl,'rgba(255,255,255,.14)'));}
+  });
+}
+
+/* 標籤 */
+const tw=(t,fs)=>[...t].reduce((w,ch)=>w+(/[⺀-￿]/.test(ch)?fs:fs*.58),0);
+function label(x,y,z,text,fs=11){const [sx,sy]=P(x,y,z);const w=tw(text,fs)+fs*1.8;
+  overlay+=`<g transform="translate(${f(sx)},${f(sy)})" pointer-events="none"><rect x="${f(-w/2)}" y="${f(-fs*.95)}" width="${f(w)}" height="${f(fs*1.9)}" rx="${f(fs*.95)}" fill="#2e2621" fill-opacity=".93"/><text y="${f(fs*.36)}" text-anchor="middle" font-size="${fs}" fill="#fff" font-weight="500" letter-spacing="1.5">${text}</text></g>`;}
+function tagSvg({m,x,y}){const fs=8.4;const extra=m.pin?' ★':'';const w=tw(m.name+extra,fs)+fs*1.1+9;
+  return `<g class="tag" data-id="${m.id}" transform="translate(${f(x)},${f(y)})"><rect x="${f(-w/2)}" y="-7.6" width="${f(w)}" height="15.2" rx="7.6" fill="#2e2621" fill-opacity=".94"/><circle cx="${f(-w/2+7.4)}" cy="0" r="2.7" fill="${ST[m.status].c}"${m.status!=='done'?' class="pulse"':''}/><text x="4" y="2.9" text-anchor="middle" font-size="${fs}" fill="#fff" font-weight="500">${m.name}${m.pin?`<tspan fill="#e9c37a"> ★</tspan>`:''}</text></g>`;}
+
+/* ───────── 建構場景 ───────── */
+const W=46,D=36,WH=5.8;
+// 城市
+seed=11;
+for(let gx=-4;gx<=10;gx++)for(let gy=1;gy<=4;gy++){if(rnd()<.18)continue;
+  const w=3.2+rnd()*3,d=3.2+rnd()*3,x=gx*7.5+rnd()*(7-w),y=-6-gy*8+rnd()*(7.5-d),h=7+rnd()*15+gy*3;
+  const g=shade(C.city,.9+rnd()*.14-gy*.015);
+  box({x,y,z:-16,w,d,h:h+16,c:shade(g,1.08),cf:g,cr:shade(g,.88),st:'rgba(90,85,80,.15)',
+    deco:({F,R,w,d,h})=>{let s='';for(let v=3;v<h-.6;v+=1.4){s+=line(F(.3,v),F(w-.3,v),'rgba(255,255,255,.35)',1.1);s+=line(R(.3,v),R(d-.3,v),'rgba(255,255,255,.22)',1.1);}return s;}},city);}
+for(let gx=1;gx<=3;gx++)for(let gy=-1;gy<=4;gy++){if(rnd()<.25)continue;
+  const w=3.2+rnd()*3,d=3.2+rnd()*3,x=-6-gx*8+rnd()*(7.5-w),y=gy*7.5+rnd()*(7-d),h=6+rnd()*12+gx*2;
+  const g=shade(C.city,.9+rnd()*.14-gx*.015);
+  box({x,y,z:-16,w,d,h:h+16,c:shade(g,1.08),cf:g,cr:shade(g,.88),st:'rgba(90,85,80,.15)',
+    deco:({F,R,w,d,h})=>{let s='';for(let v=3;v<h-.6;v+=1.4){s+=line(F(.3,v),F(w-.3,v),'rgba(255,255,255,.35)',1.1);s+=line(R(.3,v),R(d-.3,v),'rgba(255,255,255,.22)',1.1);}return s;}},city);}
+seed=3;
+
+// 地板（樓板）
+const slab=(()=>{const z=-1.1;const x0=-.35,y0=-.35;
+  const fr=[P(x0,D,z),P(W,D,z),P(W,D,0),P(x0,D,0)],rt=[P(W,y0,z),P(W,D,z),P(W,D,0),P(W,y0,0)],top=[P(x0,y0),P(W,y0),P(W,D),P(x0,D)];
+  return poly(fr,'#efe7da','stroke="rgba(70,45,25,.2)" stroke-width=".6"')+poly(rt,'#ddd1bf','stroke="rgba(70,45,25,.2)" stroke-width=".6"')+
+    line(P(x0,D,-.18),P(W,D,-.18),C.wal,2)+line(P(W,y0,-.18),P(W,D,-.18),shade(C.wal,.85),2)+poly(top,C.oak);})();
+for(let y=.9;y<D;y+=.9){floorDeco+=line(P(0,y),P(W,y),'rgba(140,100,60,.22)',.7);
+  for(let x=(y*7.3)%4;x<W;x+=3.2+((y*13)%1.5))floorDeco+=line(P(x,y-.9),P(x,y),'rgba(140,100,60,.16)',.6);}
+// 窗光
+floorDeco+=poly([P(0,0),P(W,0),P(W,D),P(0,D)],'url(#light)');
+// 區域地坪
+floorDeco+=poly(Array.from({length:41},(_,i)=>{const a=Math.PI*i/40;return P(23-9*Math.cos(a),9*Math.sin(a));}),'#ead5ae','stroke="'+C.brass+'" stroke-width="1"');
+floorDeco+=poly([P(32,28),P(W,28),P(W,D),P(32,D)],'#eee3d0');
+for(let x=32.8;x<W;x+=.8)floorDeco+=line(P(x,28),P(x,D),'rgba(140,110,80,.18)',.6);
+for(let y=28.8;y<D;y+=.8)floorDeco+=line(P(32,y),P(W,y),'rgba(140,110,80,.18)',.6);
+floorDeco+=poly([P(0,28),P(14,28),P(14,D),P(0,D)],'#e3d3bb');
+
+// 外牆：後窗牆 y=0、左窗牆 x=0
+const wallC=C.wall;
+box({x:-.35,y:-.35,w:W+.35,d:.35,h:.5,c:wallC});
+box({x:-.35,y:-.35,z:5.0,w:W+.35,d:.35,h:WH-5,c:wallC,deco:({F,w})=>line(F(0,.12),F(w,.12),C.wal,1.4)});
+box({x:-.35,y:0,w:.35,d:D,h:.5,c:wallC});
+box({x:-.35,y:0,z:5.0,w:.35,d:D,h:WH-5,c:wallC,deco:({R,d})=>line(R(0,.12),R(d,.12),C.wal,1.4)});
+box({x:-.35,y:-.35,z:.5,w:.35,d:.35,h:4.5,c:wallC});
+function windowRunY(a,b){ // 後牆
+  const n=Math.max(1,Math.round((b-a)/3.4));
+  for(let i=0;i<=n;i++){const x=a+(b-a)*i/n;if(i>0&&i<n)box({x:x-.07,y:-.3,z:.5,w:.14,d:.3,h:4.5,c:C.wal});}
+  for(let i=0;i<n;i++){const p1=a+(b-a)*i/n+.07,p2=a+(b-a)*(i+1)/n-.07;
+    item([p1,-.34,.5,p2,-.32,5],poly([P(p1,-.33,.5),P(p2,-.33,.5),P(p2,-.33,5),P(p1,-.33,5)],'url(#win)'));}
+}
+function windowRunX(a,b){ // 左牆
+  const n=Math.max(1,Math.round((b-a)/3.4));
+  for(let i=0;i<=n;i++){const y=a+(b-a)*i/n;if(i>0&&i<n)box({x:-.3,y:y-.07,z:.5,w:.3,d:.14,h:4.5,c:C.wal});}
+  for(let i=0;i<n;i++){const p1=a+(b-a)*i/n+.07,p2=a+(b-a)*(i+1)/n-.07;
+    item([-.34,p1,.5,-.32,p2,5],poly([P(-.33,p1,.5),P(-.33,p2,.5),P(-.33,p2,5),P(-.33,p1,5)],'url(#win)'));}
+}
+const slatPierY=(x1,x2)=>box({x:x1,y:-.35,z:.5,w:x2-x1,d:.35,h:4.5,c:'#b88a5e',cf:'#b88a5e',deco:slats(.16)});
+const slatPierX=(y1,y2)=>box({x:-.35,y:y1,z:.5,w:.35,d:y2-y1,h:4.5,c:'#b88a5e',cr:'#a87d53',deco:slatsR(.16)});
+// 後牆：窗—木格柵—窗(主管)—木格柵—窗
+windowRunY(0,11.4);slatPierY(11.4,13.4);windowRunY(13.4,32.6);slatPierY(32.6,34.6);windowRunY(34.6,W);
+[[0,6.6],[7.4,13.6],[14.4,20.6],[21.4,27.6],[28.4,D]].forEach(([a,b],i,arr)=>{windowRunX(a,b);if(i<arr.length-1)slatPierX(b,arr[i+1][0]);});
+
+// 部門
+const left=[MEMBERS[0],MEMBERS[1],MEMBERS[2],MEMBERS[3]], right=[MEMBERS[4],MEMBERS[5],MEMBERS[6],MEMBERS[7]];
+left.forEach((m,i)=>deptRoom(m,0,i*7,false));
+right.forEach((m,i)=>deptRoom(m,34,i*7,true));
+partitionX(12,.05,27.94,[0,1,2,3].map(i=>[i*7+4.7,i*7+6.3]));
+partitionX(34,.05,27.75,[0,1,2,3].map(i=>[i*7+4.7,i*7+6.3]));
+[7,14,21].forEach(y=>{partitionY(y,0,11.94);partitionY(y,34.06,W);});
+
+// 主管辦公室
+(()=>{const cx=23,cy=0,R=9;
+  box({x:17.6,y:.02,w:10.8,d:.38,h:5.0,c:C.stone,cf:'#ddd6cb',sh:0,deco:({F,w,h})=>{let s='';
+    [[.2,4.2,2.6,3.1,4.1,1.9],[3.5,4.6,5.2,3.6,6.9,4.4],[6.2,1.2,7.5,2.6,9.6,2.0],[1.2,1.6,2.4,.6,4.4,1.3],[8.2,4.4,9.0,3.3,10.6,3.9]].forEach(v=>{
+      s+=`<path d="M${pts([F(v[0],v[1])])} Q${pts([F(v[2],v[3])])} ${pts([F(v[4],v[5])])}" fill="none" stroke="rgba(150,135,115,.55)" stroke-width=".8"/>`;});
+    s+=line(F(0,4.6),F(w,4.6),C.brass,1.2);const lp=F(w/2,4.05);
+    s+=`<g transform="translate(${f(lp[0])},${f(lp[1])})"><rect x="-26" y="-8" width="52" height="16" rx="3" fill="rgba(255,255,255,.35)" stroke="${C.brass}" stroke-width=".8"/><text y="3.5" text-anchor="middle" font-size="9" fill="#6b4a33" letter-spacing="3" font-family="serif">AI OFFICE</text></g>`;
+    return s;}});
+  box({x:15.0,y:.1,w:2.5,d:.85,h:4.2,c:C.wal2,cf:'#6e4c35',sh:1,deco:shelves(5)});
+  box({x:28.5,y:.1,w:2.5,d:.85,h:4.2,c:C.wal2,cf:'#6e4c35',sh:1,deco:shelves(5)});
+  const X=(lx,w=0)=>lx;
+  deskSet(BOSS,X,0,{dx:19.6,dw:6.8,cx:23,dy:3.0,dd:1.5,mons:[[20.2,1.6],[24.2,1.6]],mug:25.9});
+  box({x:20.4,y:3.6,z:1.25,w:.8,d:.55,h:.12,c:'#e9dcc3'});
+  cyl({cx:26.0,cy:3.55,r:.18,z:1.25,h:.06,c:C.brass});
+  item([25.9,3.45,1.31,26.1,3.65,2.3],(()=>{const a=P(26,3.55,1.31),b=P(26,3.55,2.1);return line(a,b,C.brassD,1.4)+`<path d="M${f(b[0]-6)},${f(b[1]+3)} L${f(b[0]-3)},${f(b[1]-5)} L${f(b[0]+3)},${f(b[1]-5)} L${f(b[0]+6)},${f(b[1]+3)}Z" fill="#f1d9a6" stroke="${C.brassD}" stroke-width=".7"/>`;})());
+  // 接待區
+  rugCircle(23,6.9,1.8,'#d9c19a','rgba(150,110,70,.4)');
+  cyl({cx:23,cy:6.9,r:.55,z:0,h:.72,c:C.wal2,cs:C.wal,sh:1});
+  cyl({cx:23,cy:6.9,r:.1,z:.72,h:.18,c:'#fbf6ee'});
+  const armchair=(x,y,mir)=>{const bx=mir?x+1.05:x;box({x,y,w:1.35,d:1.3,h:.7,c:'#e9dcc6',sh:1});
+    box({x:mir?x+1.35:x-.3,y,w:.3,d:1.3,h:1.55,c:'#dccbb0'});box({x,y:y-.28,w:1.35,d:.28,h:1.05,c:'#dccbb0'});box({x,y:y+1.3,w:1.35,d:.25,h:1.0,c:'#dccbb0'});};
+  armchair(19.7,6.25,false);armchair(24.95,6.25,true);
+  plant(16.0,3.2,1.15,1);plant(30.0,3.2,1.15,0);
+  // 弧形玻璃
+  const N=36;for(let i=0;i<N;i++){const a1=Math.PI*i/N,a2=Math.PI*(i+1)/N;if(a1>=Math.PI*.44&&a2<=Math.PI*.56)continue;
+    const p1=[cx+R*Math.cos(a1),cy+R*Math.sin(a1)],p2=[cx+R*Math.cos(a2),cy+R*Math.sin(a2)];
+    const q=[P(p1[0],p1[1],0),P(p2[0],p2[1],0),P(p2[0],p2[1],3.1),P(p1[0],p1[1],3.1)];
+    let s=poly(q,'url(#glass)','stroke="rgba(255,255,255,.45)" stroke-width=".4"')+line(q[0],q[1],C.brass,2.2)+line(q[3],q[2],C.brass,2.2);
+    if(i%3===0)s+=line(q[0],q[3],C.brass,1.6);
+    item([Math.min(p1[0],p2[0]),Math.min(p1[1],p2[1]),0,Math.max(p1[0],p2[0]),Math.max(p1[1],p2[1]),3.1],s);}
+  label(23,.4,6.3,'主管辦公室',12);
+})();
+
+// 中央平台＋旋轉方塊
+cyl({cx:23,cy:17.5,r:3.6,z:0,h:.32,c:'#efe6d6',cs:'#8a6243',st:C.brass,sw:1.4,sh:1});
+cyl({cx:23,cy:17.5,r:2.5,z:.32,h:.2,c:'#f7f0e4',cs:'#dccbb0',st:C.brass,sw:1.1,
+  extra:([x,y])=>`<ellipse cx="${f(x)}" cy="${f(y)}" rx="${f(2.2*S)}" ry="${f(2.2*S*sE)}" fill="url(#glow)"/>`});
+item([21.2,15.7,.52,24.8,19.3,5.2],'<g id="cube"></g>');
+label(23,21.1,.2,'AI 中樞',10);
+plant(13.1,1.1,1.2,1);plant(32.9,1.1,1.2,1);plant(13.1,26.6,1.05,0);plant(32.9,26.9,1.05,0);plant(18.5,13.0,.9,0);plant(27.5,13.0,.9,0);
+
+// 會議室
+(()=>{partitionY(28,0,13.94);partitionX(14,28.06,D,[[30.0,31.7]]);
+  box({x:.05,y:29.8,z:1.3,w:.18,d:4.6,h:2.4,c:'#2f2b29',deco:({R,d,h})=>poly([R(.12,.12),R(d-.12,.12),R(d-.12,h-.12),R(.12,h-.12)],'#f3e6cc')+
+    line(R(.5,1.6),R(2.3,1.6),'#8a6447',1.6)+line(R(.5,1.25),R(3.5,1.25),'rgba(138,100,71,.6)',1)+line(R(.5,.95),R(3.0,.95),'rgba(138,100,71,.6)',1)+
+    poly([R(3.1,.45),R(3.5,.45),R(3.5,1.0),R(3.1,1.0)],'#c9a45c')+poly([R(3.6,.45),R(4.0,.45),R(4.0,1.5),R(3.6,1.5)],'#7f9d5e')});
+  rugRect(1.6,29.2,11,5.7,'#d6c3a5','rgba(120,90,60,.3)');
+  [3.3,6.6,9.9].forEach(x=>{box({x:x-.5,y:29.25,z:.45,w:1,d:.9,h:.25,c:C.black});box({x:x-.48,y:29.0,z:.6,w:.96,d:.22,h:1.25,c:C.black});cyl({cx:x,cy:29.7,r:.07,h:.45,c:'#6d6863'});});
+  box({x:2.2,y:30.4,w:9.6,d:2.5,h:.18,z:.98,c:C.wal2,ct:'#8a6447',deco:({F,w})=>line(F(0,.09),F(w,.09),C.brass,1)});
+  box({x:3.5,y:31.2,w:.9,d:.9,h:.98,c:C.wal,sh:1});box({x:9.6,y:31.2,w:.9,d:.9,h:.98,c:C.wal,sh:1});
+  [[4,'#fbf6ee'],[8.6,'#fbf6ee']].forEach(([x,c])=>box({x,y:31.0,z:1.16,w:.9,d:.65,h:.03,c}));
+  cyl({cx:7,cy:31.7,r:.22,z:1.16,h:.4,c:'#ece3d4'});
+  item([6.6,31.3,1.56,7.4,32.1,2.4],(()=>{const [x,y]=P(7,31.7,1.56);return [[-4,-6,'#86ad62'],[4,-6,'#6f9a52'],[0,-10,'#94b86d'],[0,-4,'#5b8445']].map(o=>`<circle cx="${f(x+o[0])}" cy="${f(y+o[1])}" r="4" fill="${o[2]}"/>`).join('');})());
+  [3.3,6.6,9.9].forEach(x=>{cyl({cx:x,cy:33.4,r:.07,h:.45,c:'#6d6863'});box({x:x-.5,y:32.95,z:.45,w:1,d:.9,h:.25,c:C.black});box({x:x-.48,y:33.85,z:.6,w:.96,d:.22,h:1.25,c:C.black});});
+  plant(13.0,35.1,1,1);plant(1.0,35.1,1,0);
+  label(7,28.5,3.7,'會議室');
+})();
+
+// 休息區
+(()=>{rugRect(15.8,28.6,14.4,6.8,'#e6d3b3','rgba(150,110,70,.35)');rugCircle(23,32.4,2.3,'#d8bf96');
+  const G=C.green;
+  box({x:18.4,y:28.7,w:9.2,d:.6,h:1.85,c:shade(G,.95),sh:1});
+  box({x:18.4,y:29.3,w:.6,d:1.2,h:1.2,c:shade(G,.95),sh:1});box({x:27.0,y:29.3,w:.6,d:1.2,h:1.2,c:shade(G,.95)});
+  box({x:19.0,y:29.3,w:8.0,d:1.2,h:.5,c:shade(G,.85),sh:1});
+  [19.0,21.7,24.35].forEach(x=>box({x:x+.03,y:29.32,z:.5,w:2.6,d:1.16,h:.32,c:G}));
+  box({x:19.6,y:29.35,z:.82,w:.8,d:.25,h:.65,c:C.orange});box({x:25.6,y:29.35,z:.82,w:.8,d:.25,h:.65,c:'#efe2c8'});
+  cyl({cx:23,cy:32.4,r:.16,h:.55,c:C.wal});cyl({cx:23,cy:32.4,r:1.3,z:.55,h:.14,c:'#8a6447',cs:C.wal,sh:0});
+  shadows+=ellipseAt(23.3,32.55,0,1.35,'#4a3018');
+  cyl({cx:22.5,cy:32.2,r:.13,z:.69,h:.17,c:'#fbf6ee'});cyl({cx:23.5,cy:32.65,r:.13,z:.69,h:.17,c:'#fbf6ee'});
+  box({x:22.8,y:31.75,z:.69,w:.7,d:.5,h:.08,c:'#b4483a'});
+  const oc=C.orange;
+  box({x:17.3,y:31.6,w:1.35,d:1.6,h:.75,c:oc,sh:1});box({x:17.0,y:31.6,w:.3,d:1.6,h:1.65,c:shade(oc,.92),sh:1});
+  box({x:17.3,y:31.35,w:1.35,d:.25,h:1.15,c:shade(oc,.92)});box({x:17.3,y:33.2,w:1.35,d:.25,h:1.15,c:shade(oc,.92)});
+  box({x:27.35,y:31.6,w:1.35,d:1.6,h:.75,c:oc,sh:1});box({x:28.7,y:31.6,w:.3,d:1.6,h:1.65,c:shade(oc,.92)});
+  box({x:27.35,y:31.35,w:1.35,d:.25,h:1.15,c:shade(oc,.92)});box({x:27.35,y:33.2,w:1.35,d:.25,h:1.15,c:shade(oc,.92)});
+  plant(15.6,28.9,1.3,1);plant(30.4,28.9,1.3,0);plant(15.6,35.3,1.1,0);plant(30.4,35.3,1.1,2);
+  // 落地燈
+  cyl({cx:29.4,cy:30.6,r:.25,h:.06,c:C.brassD});
+  item([29.2,30.4,.06,29.6,30.8,3.2],(()=>{const a=P(29.4,30.6,.06),b=P(29.4,30.6,2.7);return line(a,b,C.brassD,1.5)+`<path d="M${f(b[0]-9)},${f(b[1]+5)} L${f(b[0]-5)},${f(b[1]-6)} L${f(b[0]+5)},${f(b[1]-6)} L${f(b[0]+9)},${f(b[1]+5)}Z" fill="#f6e3bb" stroke="${C.brassD}" stroke-width=".8"/>`;})());
+  label(23,28.6,3.3,'休息區');
+})();
+
+// 茶水間
+(()=>{box({x:32,y:27.8,w:W-32,d:.3,h:2.4,c:'#b88a5e',cf:'#b88a5e',deco:slats(.16)});
+  box({x:33,y:28.15,w:10.8,d:1.3,h:1.35,c:C.wal,cf:'#7a553c',sh:1,deco:({F,w})=>{let s='';for(let u=1.35;u<w;u+=1.35)s+=line(F(u,.08),F(u,1.27),'rgba(30,20,10,.4)',.8);for(let u=.675;u<w;u+=1.35)s+=line(F(u-.2,1.1),F(u+.2,1.1),C.brass,1.4);return s;}});
+  box({x:33,y:28.15,z:1.35,w:10.8,d:1.3,h:.1,c:'#f3eee6'});
+  box({x:44.0,y:28.15,w:1.8,d:1.5,h:3.0,c:'#f1ebe1',sh:1,deco:({F,w})=>line(F(.04,1.9),F(w-.04,1.9),'rgba(60,40,20,.35)',.8)+line(F(.25,2.1),F(.25,2.7),C.brass,1.6)+line(F(.25,1.0),F(.25,1.6),C.brass,1.6)});
+  box({x:34.8,y:28.3,z:1.45,w:.95,d:.65,h:.95,c:'#3b3330',deco:({F,w})=>poly([F(.2,.55),F(w-.2,.55),F(w-.2,.75),F(.2,.75)],C.brass)});
+  cyl({cx:35.27,cy:28.9,r:.12,z:1.45,h:.18,c:'#fbf6ee',extra:([x,y])=>`<g><path class="steam" d="M${f(x-1)},${f(y-4)} q-2,-3 0,-6 q2,-3 0,-6" stroke="#fff" stroke-width="1.2" fill="none"/><path class="steam" d="M${f(x+2)},${f(y-4)} q-2,-3 0,-6 q2,-3 0,-6" stroke="#fff" stroke-width="1.2" fill="none"/></g>`});
+  cyl({cx:38.5,cy:28.8,r:.4,z:1.45,h:.2,c:'#e9dcc3',extra:([x,y])=>`<circle cx="${f(x-3)}" cy="${f(y-2)}" r="3" fill="#e0894a"/><circle cx="${f(x+3)}" cy="${f(y-2)}" r="3" fill="#d7b46a"/><circle cx="${f(x)}" cy="${f(y-4.5)}" r="3" fill="#b4483a"/>`});
+  [40.4,40.75,41.1].forEach(x=>cyl({cx:x,cy:28.7,r:.12,z:1.45,h:.28,c:'#fbf6ee'}));
+  plant(42.9,28.75,.7,2);
+  cyl({cx:39.5,cy:32.6,r:.13,h:1.35,c:C.brassD});cyl({cx:39.5,cy:32.6,r:.95,z:1.35,h:.1,c:'#f3eee6',cs:C.wal});
+  shadows+=ellipseAt(39.8,32.8,0,1,'#4a3018');
+  [[38.2,33.85],[40.8,33.85],[38.2,31.4]].forEach(([x,y])=>{cyl({cx:x,cy:y,r:.08,h:.9,c:C.brassD});cyl({cx:x,cy:y,r:.38,z:.9,h:.12,c:C.orange,sh:0});});
+  plant(45.2,35.2,1.1,1);
+  label(39,28.2,3.4,'茶水間');
+})();
+
+/* ───────── 排序（畫家演算法＋前後關係） ───────── */
+function sortItems(list){
+  const n=list.length;
+  list.forEach(it=>{let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;const [a,b,c,d,e,g]=it.bb;
+    for(const X of [a,d])for(const Y of [b,e])for(const Z of [c,g]){const p=P(X,Y,Z);x1=Math.min(x1,p[0]);x2=Math.max(x2,p[0]);y1=Math.min(y1,p[1]);y2=Math.max(y2,p[1]);}
+    it.r=[x1,y1,x2,y2];it.k=((a+d)/2*sT+(b+e)/2*cT)+(c+g)/2*.02;});
+  const E=1e-6,behind=(A,B)=>A.bb[3]<=B.bb[0]+E||A.bb[4]<=B.bb[1]+E||A.bb[5]<=B.bb[2]+E;
+  const adj=list.map(()=>[]),deg=new Array(n).fill(0);
+  for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){const A=list[i],B=list[j];
+    if(A.r[2]<=B.r[0]||B.r[2]<=A.r[0]||A.r[3]<=B.r[1]||B.r[3]<=A.r[1])continue;
+    const ab=behind(A,B),ba=behind(B,A);let from=-1;
+    if(ab&&!ba)from=i;else if(ba&&!ab)from=j;else if(ab&&ba)from=A.k<=B.k?i:j;
+    if(from<0)continue;const to=from===i?j:i;adj[from].push(to);deg[to]++;}
+  const out=[],done=new Array(n).fill(false);let ready=[];for(let i=0;i<n;i++)if(!deg[i])ready.push(i);
+  while(out.length<n){
+    if(!ready.length){let best=-1;for(let i=0;i<n;i++)if(!done[i]&&(best<0||deg[i]<deg[best]||(deg[i]===deg[best]&&list[i].k<list[best].k)))best=i;ready.push(best);deg[best]=0;}
+    let bi=0;for(let q=1;q<ready.length;q++)if(list[ready[q]].k<list[ready[bi]].k)bi=q;
+    const i=ready.splice(bi,1)[0];if(done[i])continue;done[i]=true;out.push(list[i]);
+    for(const t of adj[i]){if(--deg[t]===0&&!done[t])ready.push(t);}
+  }
+  return out.map(it=>it.svg).join('');
+}
+
+/* ───────── 輸出 SVG ───────── */
+const vx1=P(0,D)[0]-1.6*S, vx2=P(W,0)[0]+1.6*S, vy1=P(0,0,WH)[1]-4.2*S, vy2=P(W,D,-1.1)[1]+1.0*S;
+const base={x:vx1,y:vy1,w:vx2-vx1,h:vy2-vy1};
+const svg=document.getElementById('scene');
+svg.setAttribute('viewBox',`${f(base.x)} ${f(base.y)} ${f(base.w)} ${f(base.h)}`);
+svg.innerHTML=`<defs>
+ <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3e7d6"/><stop offset=".55" stop-color="#f6eee2"/><stop offset="1" stop-color="#efe5d6"/></linearGradient>
+ <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffaf0" stop-opacity=".38"/><stop offset="1" stop-color="#f5ead6" stop-opacity=".16"/></linearGradient>
+ <linearGradient id="win" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffaf2" stop-opacity=".3"/><stop offset=".5" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#fffaf2" stop-opacity=".24"/></linearGradient>
+ <radialGradient id="light" gradientUnits="userSpaceOnUse" cx="${f(P(4,4)[0])}" cy="${f(P(4,4)[1])}" r="${f(40*S)}"><stop offset="0" stop-color="#fff8e8" stop-opacity=".35"/><stop offset="1" stop-color="#fff8e8" stop-opacity="0"/></radialGradient>
+ <radialGradient id="glow"><stop offset="0" stop-color="#ffe3a3" stop-opacity=".8"/><stop offset="1" stop-color="#ffe3a3" stop-opacity="0"/></radialGradient>
+ <linearGradient id="cityfade" gradientUnits="userSpaceOnUse" x1="0" y1="${f(vy1)}" x2="0" y2="${f(P(0,20)[1])}"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+ <mask id="citymask" maskUnits="userSpaceOnUse" x="${f(vx1)}" y="${f(vy1)}" width="${f(base.w)}" height="${f(base.h)}"><rect x="${f(vx1)}" y="${f(vy1)}" width="${f(base.w)}" height="${f(base.h)}" fill="url(#cityfade)"/></mask>
+ <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3"/></filter>
+</defs>
+<rect x="${f(vx1-200)}" y="${f(vy1-200)}" width="${f(base.w+400)}" height="${f(base.h+400)}" fill="url(#sky)"/>
+<g mask="url(#citymask)" opacity=".62">${sortItems(city)}</g>
+${slab}<g>${floorDeco}</g><g filter="url(#soft)" opacity=".17">${shadows}</g><g>${rugs}</g>
+<g>${sortItems(main)}</g>
+<g>${overlay}</g><g id="tags">${tags.map(tagSvg).join('')}</g>`;
+
+/* ───────── 旋轉方塊 ───────── */
+const cube=document.getElementById('cube');
+const V=[];for(const a of [-1,1])for(const b of [-1,1])for(const c of [-1,1])V.push([a,b,c]);
+const EDG=[];for(let i=0;i<8;i++)for(let j=i+1;j<8;j++){let d=0;for(let k=0;k<3;k++)if(V[i][k]!==V[j][k])d++;if(d===1)EDG.push([i,j]);}
+const t1=Math.PI/4,t2=Math.atan(1/Math.SQRT2);
+function drawCube(t){const sz=1.45,bob=Math.sin(t*.9)*.12;
+  const pts3=V.map(([x,y,z])=>{let X=x,Y=y*Math.cos(t1)-z*Math.sin(t1),Z=y*Math.sin(t1)+z*Math.cos(t1);
+    let X2=X*Math.cos(t2)+Z*Math.sin(t2),Z2=-X*Math.sin(t2)+Z*Math.cos(t2);
+    const a=t*.35;const X3=X2*Math.cos(a)-Y*Math.sin(a),Y3=X2*Math.sin(a)+Y*Math.cos(a);
+    return [23+X3*sz,17.5+Y3*sz,3.4+bob+Z2*sz];});
+  const sp=pts3.map(p=>P(...p)),dep=pts3.map(p=>(p[0]*sT+p[1]*cT)*cE+p[2]*sE);
+  const md=dep.reduce((a,b)=>a+b)/8;
+  let s=`<circle cx="${f(P(23,17.5,3.4+bob)[0])}" cy="${f(P(23,17.5,3.4+bob)[1])}" r="${f(1.6*S)}" fill="url(#glow)" opacity=".7"/>`;
+  const es=EDG.map(([i,j])=>({i,j,d:(dep[i]+dep[j])/2})).sort((a,b)=>a.d-b.d);
+  es.forEach(e=>{const back=e.d<md;s+=line(sp[e.i],sp[e.j],back?'rgba(167,130,63,.45)':'#b88d43',back?1.4:2.4,'stroke-linecap="round"');
+    if(!back)s+=line(sp[e.i],sp[e.j],'rgba(255,246,220,.85)',.7,'stroke-linecap="round"');});
+  sp.forEach((p,i)=>{if(dep[i]>=md)s+=`<circle cx="${f(p[0])}" cy="${f(p[1])}" r="2" fill="#f4d48a"/>`;});
+  const c=P(23,17.5,3.4+bob);s+=`<circle cx="${f(c[0])}" cy="${f(c[1])}" r="3.2" fill="#fff3cf"/>`;
+  cube.innerHTML=s;}
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+if(reduce)drawCube(.6);else{const t0=performance.now();const loop=n=>{drawCube((n-t0)/1000);requestAnimationFrame(loop);};requestAnimationFrame(loop);}
+
+/* ───────── 拖曳／縮放 ───────── */
+const stage=document.getElementById('stage');let vb={...base};
+const apply=()=>svg.setAttribute('viewBox',`${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`);
+function clampVB(){vb.w=Math.min(vb.w,base.w*1.2);vb.h=vb.w*base.h/base.w;
+  const mx=base.w*.25,my=base.h*.25;vb.x=Math.max(base.x-mx,Math.min(vb.x,base.x+base.w+mx-vb.w));vb.y=Math.max(base.y-my,Math.min(vb.y,base.y+base.h+my-vb.h));}
+function unitsPerPx(){const r=svg.getBoundingClientRect();return Math.max(vb.w/r.width,vb.h/r.height);}
+function toSvg(cx,cy){const r=svg.getBoundingClientRect(),u=unitsPerPx();const ox=(r.width*u-vb.w)/2,oy=(r.height*u-vb.h)/2;return [vb.x-ox+(cx-r.left)*u,vb.y-oy+(cy-r.top)*u];}
+function zoomAt(k,sx,sy){const nw=Math.max(base.w/6,Math.min(base.w*1.2,vb.w/k));const r=nw/vb.w;vb.x=sx-(sx-vb.x)*r;vb.y=sy-(sy-vb.y)*r;vb.w=nw;vb.h=vb.h*r;clampVB();apply();}
+function focus(x,y,w){vb.w=w;vb.h=w*base.h/base.w;vb.x=x-vb.w/2;vb.y=y-vb.h/2;clampVB();apply();}
+svg.addEventListener('wheel',e=>{e.preventDefault();const [x,y]=toSvg(e.clientX,e.clientY);zoomAt(e.deltaY<0?1.15:1/1.15,x,y);},{passive:false});
+const ptrs=new Map();let moved=0,pinch0=null;
+svg.addEventListener('pointerdown',e=>{ptrs.set(e.pointerId,[e.clientX,e.clientY]);moved=0;svg.setPointerCapture(e.pointerId);svg.classList.add('drag');
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch0={d:Math.hypot(a[0]-b[0],a[1]-b[1]),w:vb.w};}});
+svg.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;const prev=ptrs.get(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+  if(ptrs.size===2&&pinch0){const [a,b]=[...ptrs.values()];const d=Math.hypot(a[0]-b[0],a[1]-b[1]);const [cx,cy]=toSvg((a[0]+b[0])/2,(a[1]+b[1])/2);
+    zoomAt(vb.w/(pinch0.w*pinch0.d/d),cx,cy);moved+=10;return;}
+  const u=unitsPerPx(),dx=e.clientX-prev[0],dy=e.clientY-prev[1];moved+=Math.abs(dx)+Math.abs(dy);vb.x-=dx*u;vb.y-=dy*u;clampVB();apply();});
+const up=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2)pinch0=null;if(!ptrs.size)svg.classList.remove('drag');};
+svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
+const center=()=>[vb.x+vb.w/2,vb.y+vb.h/2];
+document.getElementById('zin').onclick=()=>zoomAt(1.35,...center());
+document.getElementById('zout').onclick=()=>zoomAt(1/1.35,...center());
+document.getElementById('zreset').onclick=()=>{vb={...base};apply();};
+if(stage.clientWidth<640){const c=P(23,12,1);focus(c[0],c[1],base.w/2.1);}
+
+/* ───────── 名冊與詳情 ───────── */
+const roster=document.getElementById('roster');
+roster.innerHTML=ALL.map(m=>`<button type="button" class="member" data-id="${m.id}"><div class="av">${avatar(m)}</div>
+  <div class="dept"><span class="chip">${m.dept}</span><span class="st"><i class="dot" style="background:${ST[m.status].c}"></i>${m.boss?'主人':ST[m.status].t}</span>${m.pin?'<span class="st">★ 釘選</span>':''}</div>
+  <div class="mt">${m.title}</div><div class="ms">${m.boss?'整間辦公室的主人':m.sum}</div></button>`).join('');
+const sheet=document.getElementById('sheet');
+function tagPos(id){const t=tags.find(t=>t.m.id===id);return t?[t.x,t.y+30]:null;}
+function select(id,pan){
+  document.querySelectorAll('.sel').forEach(el=>el.classList.remove('sel'));
+  if(!id){sheet.hidden=true;return;}
+  const m=byId[id];document.querySelectorAll(`[data-id="${id}"]`).forEach(el=>el.classList.add('sel'));
+  document.getElementById('sh-av').innerHTML=avatar(m);
+  document.getElementById('sh-dept').innerHTML=`<span class="chip">${m.dept}</span><span class="st"><i class="dot" style="background:${ST[m.status].c}"></i>${m.boss?'主人':ST[m.status].t}</span>`;
+  document.getElementById('sh-title').textContent=m.title;
+  document.getElementById('sh-sum').textContent=m.sum;
+  document.getElementById('sh-meta').textContent=m.updated?`最後更新 ${m.updated}${m.pin?'・已釘選':''}`:'';
+  const a=document.getElementById('sh-link');if(m.sid){a.hidden=false;a.href='https://claude.ai/code/'+m.sid;}else a.hidden=true;
+  sheet.hidden=false;
+  if(pan){const p=tagPos(id);if(p){focus(p[0],p[1]+(stage.clientWidth<640?40:0),Math.min(vb.w,base.w/2.2));stage.scrollIntoView({behavior:reduce?'auto':'smooth',block:'start'});}}
+}
+svg.addEventListener('click',e=>{if(moved>6)return;const el=e.target.closest('[data-id]');select(el?el.dataset.id:null);});
+roster.addEventListener('click',e=>{const el=e.target.closest('[data-id]');if(el)select(el.dataset.id,true);});
+document.getElementById('sh-close').onclick=()=>select(null);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')select(null);});
+})();
+</script>
+</body>
+</html>

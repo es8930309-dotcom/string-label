@@ -244,12 +244,6 @@ function recordLine(r) {
   return [r['線種'], r['磅數']].filter(Boolean).join(' ');
 }
 
-function daysSince(t) {
-  const m = String(t || '').match(/(\d{4})[-/](\d{2})[-/](\d{2})/);
-  if (!m) return 0;
-  return (Date.now() - new Date(+m[1], +m[2] - 1, +m[3]).getTime()) / 86400000;
-}
-
 function shortDate(d) {
   const m = String(d || '').match(/\d{4}[-/](\d{2})[-/](\d{2})/);
   return m ? `${m[1]}/${m[2]}` : d;
@@ -369,10 +363,10 @@ function bindPhone(uid, phone) {
 }
 
 function myRackets(cust) {
-  const list = table(SHEET_RECORDS, R_HEAD).rows
-    .filter((r) => r['手機'] === cust['手機'] &&
-      (r['狀態'] === ST.DOING || (isReady(r['狀態']) && daysSince(r['通知時間'] || r['建立時間']) <= 14)))
-    .reverse();
+  // all rackets still being strung, plus the 3 most recently finished (no time limit)
+  const mine = table(SHEET_RECORDS, R_HEAD).rows.filter((r) => r['手機'] === cust['手機']).reverse();
+  const list = mine.filter((r) => r['狀態'] === ST.DOING)
+    .concat(mine.filter((r) => isReady(r['狀態'])).slice(0, 3));
   if (!list.length) return '目前沒有寄放在店裡的球拍喔 🏸';
   return '🏸 您的球拍\n\n' + list.map((r) =>
     (isReady(r['狀態']) ? `✅ 球拍完成${r['通知時間'] ? '（' + shortDate(r['通知時間']) + '）' : ''}` : '⏳ 穿線中') +
@@ -380,7 +374,7 @@ function myRackets(cust) {
 }
 
 function myHistory(cust) {
-  const list = table(SHEET_RECORDS, R_HEAD).rows.filter((r) => r['手機'] === cust['手機']).reverse().slice(0, 5);
+  const list = table(SHEET_RECORDS, R_HEAD).rows.filter((r) => r['手機'] === cust['手機']).reverse().slice(0, 10);
   if (!list.length) return '還沒有穿線紀錄喔。';
   return '📋 最近的穿線紀錄\n\n' + list.map((r) => `${shortDate(r['收拍日期'])}　${recordLine(r)}`).join('\n');
 }

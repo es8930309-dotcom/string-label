@@ -24,8 +24,10 @@ const CONFIG = {
 const SHEET_CUSTOMERS = '客人';
 const SHEET_RECORDS = '穿線紀錄';
 const C_HEAD = ['手機', '末三碼', '姓名', 'LINE名稱', 'LINE userId', '綁定時間', '備註'];
-const R_HEAD = ['編號', '建立時間', '收拍日期', '標籤名字', '手機', '線種', '主線', '橫線', '預拉', '磅數', '狀態', '通知時間', '取拍時間', '備註'];
-const ST = { DOING: '穿線中', READY: '待取拍', DONE: '已取拍' };
+const R_HEAD = ['編號', '建立時間', '收拍日期', '標籤名字', '手機', '線種', '主線', '橫線', '預拉', '磅數', '完成', '狀態', '通知時間', '備註'];
+const ST = { DOING: '穿線中', READY: '球拍完成' };
+const OLD_READY = ['待取拍', '已取拍']; // earlier versions
+const isReady = (v) => v === ST.READY || OLD_READY.indexOf(v) >= 0;
 const MENU = { RACKET: '我的球拍', HISTORY: '穿線紀錄', CHANGE: '修改手機', INFO: '店家資訊' };
 
 const WELCOME =
@@ -65,27 +67,41 @@ function doPost(e) {
 /** 第一次使用、或更新程式後執行一次 */
 function setup() {
   table(SHEET_CUSTOMERS, C_HEAD);
-  const t = table(SHEET_RECORDS, R_HEAD);
-  // 狀態欄做成下拉選單
-  const col = t.h.indexOf('狀態') + 1;
-  t.sh.getRange(2, col, t.sh.getMaxRows() - 1, 1).setDataValidation(statusRule());
-  // 改狀態時自動處理（改成「待取拍」會傳 LINE 通知）
+  let t = table(SHEET_RECORDS, R_HEAD);
+  const sh = t.sh;
+  // older sheets: add the 完成 checkbox column in front of 狀態
+  if (t.h.indexOf('完成') < 0) {
+    const sc = t.h.indexOf('狀態') + 1;
+    sh.insertColumnBefore(sc);
+    sh.getRange(1, sc).setValue('完成').setFontWeight('bold');
+    t = table(SHEET_RECORDS, R_HEAD);
+  }
+  const doneCol = t.h.indexOf('完成') + 1, stCol = t.h.indexOf('狀態') + 1;
+  // old statuses → 球拍完成
+  t.rows.forEach((r) => { if (OLD_READY.indexOf(r['狀態']) >= 0) updateRow(t, r, { '狀態': ST.READY }); });
+  // checkboxes for existing rows, ticked when already done
+  if (t.rows.length) {
+    const box = sh.getRange(2, doneCol, t.rows.length, 1);
+    box.clearFormat(); box.insertCheckboxes();
+    box.setValues(t.rows.map((r) => [isReady(r['狀態'])]));
+  }
+  sh.getRange(2, stCol, sh.getMaxRows() - 1, 1).setDataValidation(statusRule());
+  // 勾「完成」或改狀態時自動傳 LINE 通知
   const book = SpreadsheetApp.getActiveSpreadsheet();
   const has = ScriptApp.getProjectTriggers().some((tr) => tr.getHandlerFunction() === 'onStatusEdit');
   if (!has) ScriptApp.newTrigger('onStatusEdit').forSpreadsheet(book).onEdit().create();
-  book.toast('設定完成：已加入「穿線系統」選單和狀態下拉選單', '嘉友穿線系統', 8);
+  book.toast('設定完成：勾選「完成」就會通知客人', '嘉友穿線系統', 8);
 }
 
 function statusRule() {
   return SpreadsheetApp.newDataValidation()
-    .requireValueInList([ST.DOING, ST.READY, ST.DONE], true).setAllowInvalid(false).build();
+    .requireValueInList([ST.DOING, ST.READY], true).setAllowInvalid(false).build();
 }
 
 // ---------- spreadsheet menu (computer use) ----------
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('🏸 穿線系統')
-    .addItem('穿好了，通知客人取拍（選取的列）', 'menuReady')
-    .addItem('已取拍（選取的列）', 'menuPickup')
+    .addItem('球拍完成，通知客人（選取的列）', 'menuReady')
     .addSeparator()
     .addItem('重新設定（更新程式後執行）', 'setup')
     .addToUi();
@@ -108,55 +124,51 @@ function selectedRecordIds() {
   return ids;
 }
 
+function readyMessage(who, res) {
+  if (res.needChoice) return `${who}：末三碼有好幾位客人，請先在「手機」欄填完整手機號碼，再試一次`;
+  return res.notified ? `${who}：已傳 LINE 通知 ✅` : `${who}：已改成球拍完成（${res.reason}）`;
+}
+
 function menuReady() {
   const ui = SpreadsheetApp.getUi();
   try {
     const out = withLock(() => selectedRecordIds().map((id) => {
       const { r } = findRecord(id);
-      const res = markReady(id);
-      const who = r['標籤名字'];
-      if (res.needChoice) return `${who}：末三碼有好幾位客人，請先在「手機」欄填完整手機號碼，再按一次`;
-      return res.notified ? `${who}：已傳 LINE 通知 ✅` : `${who}：已改成待取拍（${res.reason}）`;
+      return readyMessage(r['標籤名字'], markReady(id));
     }));
-    ui.alert('通知取拍', out.join('\n'), ui.ButtonSet.OK);
+    ui.alert('球拍完成', out.join('\n'), ui.ButtonSet.OK);
   } catch (err) {
     ui.alert(String(err.message || err));
   }
 }
 
-function menuPickup() {
-  const ui = SpreadsheetApp.getUi();
-  try {
-    const ids = withLock(() => selectedRecordIds().map((id) => { markPickup(id); return id; }));
-    SpreadsheetApp.getActiveSpreadsheet().toast(`已取拍 ${ids.length} 筆`, '嘉友穿線系統', 5);
-  } catch (err) {
-    ui.alert(String(err.message || err));
-  }
-}
-
-/** 由 setup() 安裝的觸發條件：手動把「狀態」改成待取拍 / 已取拍時執行 */
+/** 由 setup() 安裝的觸發條件：勾選「完成」或把狀態改成「球拍完成」時執行 */
 function onStatusEdit(e) {
   const rg = e && e.range;
   if (!rg || rg.getSheet().getName() !== SHEET_RECORDS || rg.getRow() < 2 || rg.getNumRows() !== 1) return;
   const sh = rg.getSheet();
   const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
-  if (rg.getColumn() !== head.indexOf('狀態') + 1) return;
+  const col = rg.getColumn();
+  const isDone = col === head.indexOf('完成') + 1, isStatus = col === head.indexOf('狀態') + 1;
+  if (!isDone && !isStatus) return;
   const id = sh.getRange(rg.getRow(), head.indexOf('編號') + 1).getDisplayValue();
-  const value = String(e.value || '');
   if (!id) return;
+  const value = String(e.value || '').toUpperCase();
   const book = SpreadsheetApp.getActiveSpreadsheet();
+  const finish = (isDone && value === 'TRUE') || (isStatus && String(e.value) === ST.READY);
+  const undo = (isDone && value === 'FALSE') || (isStatus && String(e.value) === ST.DOING);
   try {
-    if (value === ST.READY) {
+    if (finish) {
+      const { r } = findRecord(id);
       const res = withLock(() => markReady(id));
       if (res.needChoice) {
-        rg.setValue(e.oldValue || ST.DOING);
-        book.toast('末三碼有好幾位客人：請先在「手機」欄填完整手機號碼，再改狀態', '沒有傳通知', 10);
+        withLock(() => markDoing(id));
+        book.toast('末三碼有好幾位客人：請先在「手機」欄填完整手機號碼，再勾一次', '沒有傳通知', 10);
       } else {
-        book.toast(res.notified ? '已傳 LINE 通知客人取拍 ✅' : res.reason, '待取拍', 6);
+        book.toast(readyMessage(r['標籤名字'], res), '球拍完成', 6);
       }
-    } else if (value === ST.DONE) {
-      withLock(() => markPickup(id));
-      book.toast('已記錄取拍時間', '已取拍', 4);
+    } else if (undo) {
+      withLock(() => markDoing(id));
     }
   } catch (err) {
     book.toast(String(err.message || err), '錯誤', 10);
@@ -230,6 +242,12 @@ function customerName(c) {
 
 function recordLine(r) {
   return [r['線種'], r['磅數']].filter(Boolean).join(' ');
+}
+
+function daysSince(t) {
+  const m = String(t || '').match(/(\d{4})[-/](\d{2})[-/](\d{2})/);
+  if (!m) return 0;
+  return (Date.now() - new Date(+m[1], +m[2] - 1, +m[3]).getTime()) / 86400000;
 }
 
 function shortDate(d) {
@@ -352,11 +370,12 @@ function bindPhone(uid, phone) {
 
 function myRackets(cust) {
   const list = table(SHEET_RECORDS, R_HEAD).rows
-    .filter((r) => r['手機'] === cust['手機'] && (r['狀態'] === ST.DOING || r['狀態'] === ST.READY))
+    .filter((r) => r['手機'] === cust['手機'] &&
+      (r['狀態'] === ST.DOING || (isReady(r['狀態']) && daysSince(r['通知時間'] || r['建立時間']) <= 14)))
     .reverse();
   if (!list.length) return '目前沒有寄放在店裡的球拍喔 🏸';
   return '🏸 您的球拍\n\n' + list.map((r) =>
-    (r['狀態'] === ST.READY ? '✅ 可以取拍了' : '⏳ 穿線中') +
+    (isReady(r['狀態']) ? `✅ 球拍完成${r['通知時間'] ? '（' + shortDate(r['通知時間']) + '）' : ''}` : '⏳ 穿線中') +
     `\n${recordLine(r)}（${shortDate(r['收拍日期'])} 收拍）`).join('\n\n');
 }
 
@@ -374,7 +393,6 @@ function handleApi(action, b) {
     case 'create': return withLock(() => createRecord(b));
     case 'list': return { records: listOpen() };
     case 'ready': return withLock(() => markReady(b.id, b.phone));
-    case 'pickup': return withLock(() => markPickup(b.id));
     default: throw new Error('未知的動作：' + action);
   }
 }
@@ -402,13 +420,16 @@ function createRecord(b) {
     if (hit.length === 1) phone = hit[0].phone;
   }
   const t = table(SHEET_RECORDS, R_HEAD);
-  const id = 'R' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyMMddHHmmss') + Math.floor(Math.random() * 90 + 10);
+  const id = 'R' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyMMddHHmmss') + Utilities.getUuid().slice(0, 4).toUpperCase();
   appendRow(t, {
     '編號': id, '建立時間': now(), '收拍日期': b.date || '', '標籤名字': name, '手機': phone,
     '線種': b.string || '', '主線': b.main || '', '橫線': b.cross || '', '預拉': b.pre ? b.pre + '%' : '',
     '磅數': b.tension || '', '狀態': ST.DOING,
   });
-  t.sh.getRange(t.sh.getLastRow(), t.h.indexOf('狀態') + 1).setDataValidation(statusRule());
+  const last = t.sh.getLastRow();
+  t.sh.getRange(last, t.h.indexOf('狀態') + 1).setDataValidation(statusRule());
+  const box = t.sh.getRange(last, t.h.indexOf('完成') + 1);
+  box.clearFormat(); box.insertCheckboxes();
   return { id, phone };
 }
 
@@ -416,7 +437,7 @@ function listOpen() {
   const cust = {};
   table(SHEET_CUSTOMERS, C_HEAD).rows.forEach((c) => { if (c['手機']) cust[c['手機']] = c; });
   return table(SHEET_RECORDS, R_HEAD).rows
-    .filter((r) => r['狀態'] === ST.DOING || r['狀態'] === ST.READY)
+    .filter((r) => r['狀態'] === ST.DOING)
     .reverse().slice(0, 100)
     .map((r) => {
       const c = cust[r['手機']];
@@ -460,11 +481,19 @@ function markReady(id, phoneIn) {
     }
   }
   updateRow(t, r, Object.assign({ '狀態': ST.READY }, notified ? { '通知時間': now() } : {}));
+  setDone(t, r, true);
   return { notified, reason };
 }
 
-function markPickup(id) {
+function markDoing(id) {
   const { t, r } = findRecord(id);
-  updateRow(t, r, { '狀態': ST.DONE, '取拍時間': now() });
-  return {};
+  updateRow(t, r, { '狀態': ST.DOING });
+  setDone(t, r, false);
+}
+
+function setDone(t, r, on) {
+  const j = t.h.indexOf('完成');
+  if (j < 0) return;
+  const cell = t.sh.getRange(r._row, j + 1);
+  if (on) cell.check(); else cell.uncheck();
 }

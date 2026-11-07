@@ -217,8 +217,8 @@ summary .pill { margin-left: 6px; }
     </div>
   </form>
 
-  <details id="ordersBox" hidden>
-    <summary>取拍清單 <span id="ordersCount" class="pill" hidden></span></summary>
+  <details id="ordersBox" open hidden>
+    <summary>穿線中的球拍 <span id="ordersCount" class="pill" hidden></span></summary>
     <div class="panel">
       <div class="head"><span class="hint" id="ordersHint"></span><button type="button" class="edit" id="ordersRefresh">重新整理</button></div>
       <div id="orders" class="history"></div>
@@ -651,10 +651,10 @@ summary .pill { margin-left: 6px; }
   }
   function drawOrders(list) {
     const box = $("orders"); box.innerHTML = "";
-    const doing = list.filter((r) => r.status === "穿線中").length;
+    list = list.filter((r) => r.status === "穿線中");
     const cnt = $("ordersCount"); cnt.hidden = !list.length;
-    cnt.textContent = `${doing} 穿線中 · ${list.length - doing} 待取拍`;
-    if (!list.length) { box.append(el("p", { className: "empty", textContent: "目前沒有寄放的球拍。" })); return; }
+    cnt.textContent = `${list.length} 支`;
+    if (!list.length) { box.append(el("p", { className: "empty", textContent: "目前沒有穿線中的球拍。" })); return; }
     list.forEach((r) => {
       const card = el("div", { className: "order" });
       const pill = el("span", { className: "pill " + (r.status === "穿線中" ? "doing" : "ready"), textContent: r.status });
@@ -662,22 +662,11 @@ summary .pill { margin-left: 6px; }
         el("span", { className: "num", textContent: r.name }), pill,
         el("span", { className: "order-sub", textContent: r.customer ? `${r.customer} ${mask(r.phone)}` : (r.phone ? mask(r.phone) : "未對應客人") })));
       card.append(el("div", { className: "order-info", textContent: [r.string, r.tension, fmtDate(r.date)].filter(Boolean).join(" · ") }));
-      if (r.status === "待取拍") card.append(el("div", { className: "order-sub", textContent: r.notified ? `已通知 ${r.notified}` : "沒有傳 LINE 通知" }));
       const actions = el("div", { className: "order-actions" });
       const note = el("div", { className: "order-sub" });
-      if (r.status === "穿線中") {
-        const b = el("button", { type: "button", textContent: "穿好了，通知客人" });
-        b.onclick = () => ready(r, b, note, actions);
-        actions.append(b);
-      } else {
-        const b = el("button", { type: "button", textContent: "已取拍" });
-        b.onclick = async () => {
-          b.disabled = true;
-          try { await api("pickup", { id: r.id }); setMsg(`${r.name} 已取拍`, "ok"); loadOrders(); }
-          catch (e) { b.disabled = false; note.textContent = "失敗：" + e.message; }
-        };
-        actions.append(b);
-      }
+      const b = el("button", { type: "button", textContent: "球拍完成，通知客人" });
+      b.onclick = () => ready(r, b, note, actions);
+      actions.append(b);
       card.append(actions, note);
       box.append(card);
     });
@@ -696,7 +685,7 @@ summary .pill { margin-left: 6px; }
         });
         return;
       }
-      setMsg(j.notified ? `已用 LINE 通知 ${r.name}` : `${r.name} 已改成待取拍（${j.reason}）`, j.notified ? "ok" : "");
+      setMsg(j.notified ? `已用 LINE 通知 ${r.name}` : `${r.name} 已改成球拍完成（${j.reason}）`, j.notified ? "ok" : "");
       loadOrders();
     } catch (e) {
       btn.disabled = false; note.textContent = "失敗：" + e.message;

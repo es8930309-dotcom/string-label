@@ -116,6 +116,13 @@ details { background: var(--surface); border: 1px solid var(--line); border-radi
 summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
 .panel { padding: 0 14px 14px; display: grid; gap: 12px; }
 .panel h2 { font-size: 14px; margin: 4px 0 0; }
+.guide ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; font-size: 14px; }
+.guide b { font-weight: 700; }
+.authors { display: grid; gap: 6px; max-height: 420px; overflow-y: auto; }
+.author-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 10px; background: var(--chip); }
+.author-row .who { min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.author-row .who small { color: var(--muted); margin-left: 4px; }
+.author-row select { width: auto; min-height: 34px; padding: 4px 8px; font-size: 13px; border-radius: 8px; max-width: 9em; }
 #catText { min-height: 220px; font-size: 13px; line-height: 1.6; }
 
 .toast {
@@ -133,6 +140,20 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
     <h1>社群收藏整理</h1>
     <span class="count" id="count"></span>
   </header>
+
+  <details class="guide" id="guide">
+    <summary>使用說明</summary>
+    <div class="panel">
+      <ol>
+        <li><b>加連結</b>：在 FB / IG / Threads / 小紅書按「分享 → 複製連結」，貼到下面的框，按「加入並自動分類」。一次貼很多個也可以。</li>
+        <li><b>匯入舊收藏</b>：按「匯入檔案」，選 IG / FB / Threads 下載的收藏 JSON 檔。</li>
+        <li><b>分類</b>：匯出檔大多只有「帳號名稱」沒有內文，所以會先放在「未分類」。打開下方「<b>依帳號分類</b>」，幫每個帳號選一次分類，同帳號的貼文就會一起歸好，之後新加的也會自動套用。</li>
+        <li><b>找東西</b>：點上方的平台、分類標籤篩選，或用搜尋框。看過的按「已看」，再勾「隱藏已看」。</li>
+        <li><b>單筆調整</b>：每筆的下拉選單可以改分類；「編輯」可以改標題、寫備註（備註裡的字也會拿來比對關鍵字）。</li>
+        <li><b>備份</b>：資料只存在這個瀏覽器，換手機前到最下面「備份與搬家」匯出備份。</li>
+      </ol>
+    </div>
+  </details>
 
   <section class="card" aria-label="新增連結">
     <textarea id="input" placeholder="把連結貼在這裡（可以一次貼很多個）&#10;&#10;從 FB / IG / Threads / 小紅書 按「分享 → 複製連結」，連分享文字一起貼上也可以，標題會自動抓出來。"></textarea>
@@ -153,6 +174,15 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
       <label class="check"><input type="checkbox" id="hideDone">隱藏已看</label>
     </div>
   </section>
+
+  <details id="authorPanel">
+    <summary>依帳號分類 <span class="count" id="authorCount"></span></summary>
+    <div class="panel">
+      <p class="hint">列出收藏裡出現的帳號（未分類多的排前面）。幫帳號選一個分類，這個帳號的所有貼文都會歸到那裡，以後新加入的也會自動套用。你在單筆手動改過的不受影響。</p>
+      <input id="authorSearch" type="search" placeholder="搜尋帳號…">
+      <div class="authors" id="authors"></div>
+    </div>
+  </details>
 
   <section class="list" id="list" aria-live="polite"></section>
 
@@ -237,10 +267,10 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      if (Array.isArray(s.items) && typeof s.cats === 'string') return s;
+      if (Array.isArray(s.items) && typeof s.cats === 'string') { s.authors ||= {}; return s; }
     }
   } catch (e) { /* 私密模式或資料壞掉 → 用空白開始 */ }
-  return { items: [], cats: DEFAULT_CATS };
+  return { items: [], cats: DEFAULT_CATS, authors: {} };
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -260,7 +290,18 @@ function parseCats(text) {
 }
 function cats() { return parseCats(state.cats); }
 
+// 帳號：Threads 從網址抓 @帳號；IG / FB 匯出檔的標題通常就是帳號名稱
+function authorOf(it) {
+  const m = it.url.match(/threads\.(?:net|com)\/@([^/?#]+)/i) || it.url.match(/instagram\.com\/(?!p\/|reel\/|reels\/|tv\/|stories\/|explore\/)([A-Za-z0-9._]{2,30})\/?$/i);
+  if (m) return m[1].toLowerCase();
+  const t = (it.title || '').trim();
+  if (/^@?[A-Za-z0-9._]{2,30}$/.test(t) && /[a-z_.]/i.test(t)) return t.replace(/^@/, '').toLowerCase();
+  return '';
+}
+
 function classify(item, catList = cats()) {
+  const a = authorOf(item);
+  if (a && state.authors && state.authors[a]) return state.authors[a];
   const hay = `${item.title} ${item.note} ${item.url}`.toLowerCase();
   let best = UNCAT, bestScore = 0;
   for (const c of catList) {
@@ -444,6 +485,7 @@ async function importFile(file) {
     try { data = JSON.parse(text); } catch (e) { toast('JSON 格式錯誤，無法匯入'); return; }
     if (data && data.app === 'social-links' && Array.isArray(data.items)) {
       if (typeof data.cats === 'string' && data.cats.trim() && confirm('備份檔裡有分類設定，要一起套用嗎？\n（取消＝保留目前的分類）')) state.cats = data.cats;
+      if (data.authors && typeof data.authors === 'object') state.authors = { ...data.authors, ...state.authors };
       addEntries(data.items, { source: '備份' });
     } else {
       const entries = harvestJson(data);
@@ -543,7 +585,31 @@ function renderList() {
   }).join('') + (items.length > MAX ? `<div class="empty">只顯示前 ${MAX} 筆，請用平台、分類或搜尋縮小範圍</div>` : '');
 }
 
-function render() { renderChips(); renderList(); }
+function renderAuthors() {
+  const map = new Map();
+  for (const it of state.items) {
+    const a = authorOf(it);
+    if (!a) continue;
+    const r = map.get(a) || { n: 0, un: 0, plats: new Set() };
+    r.n++; if (it.cat === UNCAT) r.un++; r.plats.add(it.plat);
+    map.set(a, r);
+  }
+  const q = ($('authorSearch').value || '').trim().toLowerCase();
+  const rows = [...map].filter(([a]) => !q || a.includes(q)).sort((x, y) => y[1].un - x[1].un || y[1].n - x[1].n);
+  const totalUn = [...map.values()].reduce((s, r) => s + r.un, 0);
+  $('authorCount').textContent = map.size ? `（${map.size} 個帳號，${totalUn} 筆未分類）` : '';
+  if (!map.size) { $('authors').innerHTML = '<p class="hint">目前沒有可辨識帳號的收藏</p>'; return; }
+  const names = cats().map(c => c.name);
+  const MAX = 200;
+  $('authors').innerHTML = rows.slice(0, MAX).map(([a, r]) => {
+    const cur = state.authors[a] || '';
+    const plats = [...r.plats].map(p => (PLAT_BY_ID[p] || PLAT_BY_ID.web).name).join('、');
+    return `<div class="author-row"><span class="who">@${esc(a)}<small>${r.n} 筆${r.un ? `・未分類 ${r.un}` : ''}・${esc(plats)}</small></span>
+      <select data-author="${esc(a)}" aria-label="@${esc(a)} 的分類"><option value="">— 選分類 —</option>${names.map(n => `<option${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>`;
+  }).join('') + (rows.length > MAX ? `<p class="hint">只顯示前 ${MAX} 個，請用搜尋找其他帳號</p>` : '');
+}
+
+function render() { renderChips(); renderList(); renderAuthors(); }
 
 let toastTimer;
 function toast(msg, undo) {
@@ -630,6 +696,23 @@ $('toastUndo').addEventListener('click', () => {
   $('toast').hidden = true;
 });
 
+$('authorSearch').addEventListener('input', renderAuthors);
+$('authors').addEventListener('change', e => {
+  const a = e.target.dataset.author;
+  if (a === undefined) return;
+  const v = e.target.value;
+  if (v) state.authors[a] = v; else delete state.authors[a];
+  let n = 0;
+  const list = cats();
+  for (const it of state.items) {
+    if (it.manual || authorOf(it) !== a) continue;
+    it.cat = classify(it, list); n++;
+  }
+  save(); render();
+  toast(v ? `@${a} 的 ${n} 筆已歸到「${v}」` : `已取消 @${a} 的分類設定`);
+});
+if (!state.items.length) $('guide').open = true;
+
 $('catText').value = state.cats;
 $('saveCats').addEventListener('click', () => {
   state.cats = $('catText').value.trim();
@@ -660,7 +743,7 @@ function download(name, text, type) {
 }
 const stamp = () => new Date().toISOString().slice(0, 10);
 $('exportJson').addEventListener('click', () => {
-  download(`社群收藏備份-${stamp()}.json`, JSON.stringify({ app: 'social-links', version: 1, exported: new Date().toISOString(), cats: state.cats, items: state.items }, null, 1), 'application/json');
+  download(`社群收藏備份-${stamp()}.json`, JSON.stringify({ app: 'social-links', version: 1, exported: new Date().toISOString(), cats: state.cats, authors: state.authors, items: state.items }, null, 1), 'application/json');
 });
 $('exportHtml').addEventListener('click', () => {
   // 依「分類 / 平台」產生資料夾，可匯入 Chrome、Safari、Edge 的書籤

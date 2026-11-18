@@ -24,7 +24,7 @@
   --chip: #e8e4ef;
   --ok: #1f7a4d;
   --err: #b3261e;
-  --fb: #1877f2; --ig: #c13584; --th: #222222; --xhs: #ff2442; --yt: #e00000; --tt: #00a3a3; --x: #444444; --web: #6a6478; --dc: #006aa6; --ptt: #5a5a5a; --line-c: #06a24a;
+  --fb: #1877f2; --ig: #c13584; --th: #222222; --xhs: #ff2442; --yt: #e00000; --tt: #00a3a3; --x: #444444; --web: #6a6478; --dc: #006aa6; --ptt: #5a5a5a; --line-c: #06a24a; --bcn: #0b6fb8;
   --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
   color-scheme: light;
 }
@@ -32,14 +32,14 @@
   :root:not([data-theme="light"]) {
     --bg: #131118; --surface: #1d1a24; --ink: #ebe7f2; --muted: #a39cb1; --line: #322d3d;
     --accent: #c9b8ff; --accent-ink: #1a1427; --chip: #28232f; --ok: #5fcf96; --err: #ff8a80;
-    --fb: #6aa8ff; --ig: #f07ac0; --th: #d8d8d8; --xhs: #ff6b7f; --yt: #ff6b6b; --tt: #4fd6d6; --x: #bdbdbd; --web: #a39cb1; --dc: #58b6f0; --ptt: #bdbdbd; --line-c: #4fd38a;
+    --fb: #6aa8ff; --ig: #f07ac0; --th: #d8d8d8; --xhs: #ff6b7f; --yt: #ff6b6b; --tt: #4fd6d6; --x: #bdbdbd; --web: #a39cb1; --dc: #58b6f0; --ptt: #bdbdbd; --line-c: #4fd38a; --bcn: #6fb6ec;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #131118; --surface: #1d1a24; --ink: #ebe7f2; --muted: #a39cb1; --line: #322d3d;
   --accent: #c9b8ff; --accent-ink: #1a1427; --chip: #28232f; --ok: #5fcf96; --err: #ff8a80;
-  --fb: #6aa8ff; --ig: #f07ac0; --th: #d8d8d8; --xhs: #ff6b7f; --yt: #ff6b6b; --tt: #4fd6d6; --x: #bdbdbd; --web: #a39cb1; --dc: #58b6f0; --ptt: #bdbdbd; --line-c: #4fd38a;
+  --fb: #6aa8ff; --ig: #f07ac0; --th: #d8d8d8; --xhs: #ff6b7f; --yt: #ff6b6b; --tt: #4fd6d6; --x: #bdbdbd; --web: #a39cb1; --dc: #58b6f0; --ptt: #bdbdbd; --line-c: #4fd38a; --bcn: #6fb6ec;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -229,6 +229,7 @@ const PLATFORMS = [
   { id: 'dc',   name: 'Dcard',     color: 'var(--dc)',  hosts: ['dcard.tw'] },
   { id: 'ptt',  name: 'PTT',       color: 'var(--ptt)', hosts: ['ptt.cc', 'pttweb.cc'] },
   { id: 'line', name: 'LINE',      color: 'var(--line-c)', hosts: ['line.me', 'lin.ee'] },
+  { id: 'bcn',  name: '中羽在線',   color: 'var(--bcn)', hosts: ['badmintoncn.com'], cat: '運動健身' },
   { id: 'web',  name: '其他網站',   color: 'var(--web)', hosts: [] },
 ];
 const PLAT_BY_ID = Object.fromEntries(PLATFORMS.map(p => [p.id, p]));
@@ -259,6 +260,7 @@ const KEY = 'social-links-v1';
 
 /* ---------- 狀態 ---------- */
 let state = load();
+for (const it of state.items) if (!it.cat) it.cat = classify(it);
 let view = { plat: 'all', cat: 'all', q: '', hideDone: false, editing: null };
 let lastRemoved = null;
 
@@ -267,7 +269,16 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      if (Array.isArray(s.items) && typeof s.cats === 'string') { s.authors ||= {}; return s; }
+      if (Array.isArray(s.items) && typeof s.cats === 'string') {
+        s.authors ||= {};
+        for (const it of s.items) {                                   // 新增平台後，舊資料重新判斷平台
+          try {
+            const p = platformOf(new URL(it.url).hostname);
+            if (p !== it.plat) { it.plat = p; if (it.cat === UNCAT && !it.manual) it.cat = ''; }
+          } catch (e) {}
+        }
+        return s;
+      }
     }
   } catch (e) { /* 私密模式或資料壞掉 → 用空白開始 */ }
   return { items: [], cats: DEFAULT_CATS, authors: {} };
@@ -308,6 +319,10 @@ function classify(item, catList = cats()) {
     let score = 0;
     for (const k of c.kws) if (k && hay.includes(k)) score += 1;
     if (score > bestScore) { best = c.name; bestScore = score; }
+  }
+  if (best === UNCAT) {                                               // 關鍵字沒命中：用平台預設分類（例如中羽在線 → 運動健身）
+    const pc = (PLAT_BY_ID[item.plat] || {}).cat;
+    if (pc && catList.some(c => c.name === pc)) return pc;
   }
   return best;
 }

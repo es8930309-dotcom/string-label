@@ -98,6 +98,7 @@ textarea:focus-visible, input:focus-visible, select:focus-visible, button:focus-
 .title { flex: 1; min-width: 0; font-weight: 500; color: var(--ink); text-decoration: none; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .title:hover { text-decoration: underline; }
 .url { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desc { font-size: 13px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .note { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; white-space: pre-wrap; }
 .item-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .item-bar select { width: auto; max-width: 7.5em; min-height: 34px; padding: 4px 8px; font-size: 13px; border-radius: 8px; }
@@ -195,6 +196,20 @@ summary { padding: 12px 14px; cursor: pointer; font-weight: 500; }
         <button class="btn primary" id="saveCats" type="button">儲存分類</button>
         <button class="btn" id="reclassify" type="button">重新自動分類（略過手動設定的）</button>
         <button class="btn" id="resetCats" type="button">還原預設分類</button>
+      </div>
+    </div>
+  </details>
+
+  <details id="metaPanel">
+    <summary>自動抓標題</summary>
+    <div class="panel">
+      <p class="hint">加入連結後，會透過你自己的 Google Apps Script（LINE 取拍系統的後端）去讀網頁標題和簡介，再用來自動分類。<b>YouTube、Threads、一般網站</b>大多抓得到；IG 時有時無；<b>FB、小紅書、中羽在線</b>會擋，抓不到（小紅書請連分享文字一起貼）。沒設定後端時只會抓 YouTube。</p>
+      <p class="hint" id="metaStatus"></p>
+      <input id="metaUrl" placeholder="Apps Script 網頁應用程式網址（和標籤 App 相同）" inputmode="url" aria-label="Apps Script 網址">
+      <input id="metaKey" type="password" placeholder="店家密碼（和標籤 App 相同）" aria-label="店家密碼">
+      <div class="actions">
+        <button class="btn primary" id="metaSave" type="button">儲存並測試</button>
+        <button class="btn" id="metaRun" type="button">幫沒標題的補抓</button>
       </div>
     </div>
   </details>
@@ -313,7 +328,7 @@ function authorOf(it) {
 function classify(item, catList = cats()) {
   const a = authorOf(item);
   if (a && state.authors && state.authors[a]) return state.authors[a];
-  const hay = `${item.title} ${item.note} ${item.url}`.toLowerCase();
+  const hay = `${item.title} ${item.desc || ''} ${item.note} ${item.url}`.toLowerCase();
   let best = UNCAT, bestScore = 0;
   for (const c of catList) {
     let score = 0;
@@ -403,6 +418,7 @@ function addEntries(entries, { source = '' } = {}) {
   const catList = cats();
   const byKey = new Map(state.items.map(it => [it.key, it]));
   let added = 0, dup = 0, bad = 0;
+  const fresh = [];
   for (const e of entries) {
     const u = cleanUrl(e.url || '');
     if (!u) { bad++; continue; }
@@ -425,9 +441,11 @@ function addEntries(entries, { source = '' } = {}) {
     if (!item.cat) item.cat = classify(item, catList);
     state.items.unshift(item);
     byKey.set(key, item);
+    fresh.push(item);
     added++;
   }
   save(); render();
+  queueTitles(fresh);
   const parts = [`新增 ${added} 筆`];
   if (dup) parts.push(`${dup} 筆已存在`);
   if (bad) parts.push(`${bad} 筆不是網址`);
@@ -523,7 +541,7 @@ function matches(it, ignore) {
   if (ignore !== 'cat' && view.cat !== 'all' && it.cat !== view.cat) return false;
   if (view.hideDone && it.done) return false;
   if (view.q) {
-    const hay = `${it.title} ${it.note} ${it.url} ${it.cat}`.toLowerCase();
+    const hay = `${it.title} ${it.desc || ''} ${it.note} ${it.url} ${it.cat}`.toLowerCase();
     if (!view.q.toLowerCase().split(/\s+/).every(w => hay.includes(w))) return false;
   }
   return true;
@@ -588,6 +606,7 @@ function renderList() {
         <a class="title" href="${esc(it.url)}" target="_blank" rel="noopener noreferrer" data-act="open">${esc(shown)}</a>
       </div>
       ${it.title ? `<div class="url">${esc(it.url)}</div>` : ''}
+      ${it.desc && it.desc !== it.title ? `<div class="desc">${esc(it.desc)}</div>` : ''}
       ${it.note ? `<div class="note">${esc(it.note)}</div>` : ''}
       <div class="item-bar">
         <select data-act="cat" aria-label="分類">${catOptions(it.cat)}</select>
@@ -624,7 +643,7 @@ function renderAuthors() {
   }).join('') + (rows.length > MAX ? `<p class="hint">只顯示前 ${MAX} 個，請用搜尋找其他帳號</p>` : '');
 }
 
-function render() { renderChips(); renderList(); renderAuthors(); }
+function render() { renderChips(); renderList(); renderAuthors(); if (typeof metaRunBtn === 'function') metaRunBtn(); }
 
 let toastTimer;
 function toast(msg, undo) {
@@ -801,6 +820,112 @@ $('clearAll').addEventListener('click', () => {
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+/* ---------- 自動抓標題 ---------- */
+const META_KEY = 'social-links-meta';
+const NO_FETCH = new Set(['fb', 'xhs', 'bcn', 'line']);     // 這些平台一定擋，不浪費次數
+function metaCfg() {
+  let own = {}, label = {};
+  try { own = JSON.parse(localStorage.getItem(META_KEY) || '{}'); } catch (e) {}
+  try { label = JSON.parse(localStorage.getItem('sl.cfg') || '{}'); } catch (e) {}   // 同網站的標籤 App 設定
+  return { url: own.url || label.apiUrl || '', key: own.key || label.apiKey || '' };
+}
+const backendOn = () => { const c = metaCfg(); return !!(c.url && c.key); };
+
+function needsTitle(it) {
+  if (it.fetched || NO_FETCH.has(it.plat)) return false;
+  if (!backendOn() && it.plat !== 'yt') return false;
+  const t = (it.title || '').trim().toLowerCase();
+  return !t || t === authorOf(it);
+}
+
+async function metaApi(urls) {
+  const c = metaCfg();
+  const r = await fetch(c.url, {
+    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ key: c.key, action: 'meta', urls }),
+  });
+  let j;
+  try { j = await r.json(); } catch (e) { throw new Error('Apps Script 網址不正確，或沒有部署成「所有人」都能存取'); }
+  if (!j.ok) throw new Error(/未知的動作/.test(j.error || '') ? 'Apps Script 還是舊版，請貼上新版程式碼並重新部署' : (j.error || '後端回應錯誤'));
+  return j.items || [];
+}
+async function noembed(url) {
+  try {
+    const r = await fetch('https://noembed.com/embed?url=' + encodeURIComponent(url));
+    const j = await r.json();
+    return { url, title: j.title || '', desc: j.author_name || '' };
+  } catch (e) { return { url, title: '', desc: '' }; }
+}
+
+let metaQueue = [], metaBusy = false;
+function queueTitles(items) {
+  const todo = items.filter(needsTitle);
+  if (!todo.length) return;
+  const seen = new Set(metaQueue.map(x => x.id));
+  for (const it of todo) if (!seen.has(it.id)) metaQueue.push(it);
+  runMeta();
+}
+async function runMeta() {
+  if (metaBusy) return;
+  metaBusy = true;
+  let got = 0, done = 0;
+  const total = metaQueue.length;
+  try {
+    while (metaQueue.length) {
+      const batch = metaQueue.splice(0, backendOn() ? 10 : 1);
+      if (total > 3) $('metaStatus').textContent = `正在抓標題… ${done}/${total}`;
+      const res = backendOn() ? await metaApi(batch.map(it => it.url)) : await Promise.all(batch.map(it => noembed(it.url)));
+      const list = cats();
+      batch.forEach((it, i) => {
+        const r = res[i] || {};
+        it.fetched = true;
+        if (!state.items.includes(it)) return;                        // 抓的時候被刪掉了
+        if (r.title && needsTitleNow(it)) { it.title = r.title; got++; }
+        if (r.desc && !it.desc) it.desc = r.desc;
+        if (!it.manual) it.cat = classify(it, list);
+      });
+      done += batch.length;
+      save(); render();
+    }
+    $('metaStatus').textContent = total > 3 ? `完成：${total} 筆裡抓到 ${got} 個標題` : '';
+    if (got) toast(`抓到 ${got} 個標題，已重新分類`);
+  } catch (e) {
+    metaQueue = [];
+    $('metaStatus').textContent = '抓標題失敗：' + e.message;
+    toast('抓標題失敗：' + e.message);
+  } finally { metaBusy = false; }
+}
+function needsTitleNow(it) { const t = (it.title || '').trim().toLowerCase(); return !t || t === authorOf(it); }
+
+function metaRunBtn() {
+  const n = state.items.filter(needsTitle).length;
+  $('metaRun').textContent = `幫沒標題的補抓（${n} 筆）`;
+  $('metaRun').disabled = !n;
+}
+function metaStatusText() {
+  const c = metaCfg();
+  metaRunBtn();
+  if (metaBusy) return;
+  $('metaStatus').textContent = c.url && c.key ? '後端已設定' + (localStorage.getItem(META_KEY) ? '' : '（沿用標籤 App 的設定）') : '尚未設定後端，目前只會抓 YouTube 標題';
+}
+(function initMeta() {
+  const c = metaCfg();
+  $('metaUrl').value = c.url; $('metaKey').value = c.key;
+  $('metaPanel').addEventListener('toggle', metaStatusText);
+  $('metaSave').addEventListener('click', async () => {
+    const url = $('metaUrl').value.trim(), key = $('metaKey').value.trim();
+    try { localStorage.setItem(META_KEY, JSON.stringify({ url, key })); } catch (e) {}
+    if (!url || !key) { metaStatusText(); return; }
+    $('metaStatus').textContent = '測試中…';
+    try {
+      const r = await metaApi(['https://example.com/']);
+      $('metaStatus').textContent = r[0] && r[0].title ? '連線成功，可以自動抓標題了' : '連線成功，但測試網頁沒抓到標題';
+    } catch (e) { $('metaStatus').textContent = '測試失敗：' + e.message; }
+    metaRunBtn();
+  });
+  $('metaRun').addEventListener('click', () => { queueTitles(state.items); });
+})();
 
 render();
 </script>

@@ -387,6 +387,7 @@ function handleApi(action, b) {
     case 'create': return withLock(() => createRecord(b));
     case 'list': return { records: listOpen() };
     case 'ready': return withLock(() => markReady(b.id, b.phone));
+    case 'meta': return { items: fetchMeta(b.urls) };
     default: throw new Error('未知的動作：' + action);
   }
 }
@@ -490,4 +491,62 @@ function setDone(t, r, on) {
   if (j < 0) return;
   const cell = t.sh.getRange(r._row, j + 1);
   if (on) cell.check(); else cell.uncheck();
+}
+
+// ---------- 社群收藏整理：幫連結抓標題（links/ 頁面用） ----------
+// 一次最多 20 個網址；YouTube 走官方 oEmbed，其他抓網頁的 og:title / og:description / <title>。
+// FB、小紅書、有防爬驗證的網站通常只回登入頁，會被當成沒抓到。
+const META_GENERIC = /^(instagram|threads|facebook|小红书|小紅書|rednote|youtube|x|log in.*|登入.*|login.*|error.*|.*security check.*)$/i;
+
+function fetchMeta(urls) {
+  urls = (Array.isArray(urls) ? urls : []).filter((u) => /^https?:\/\//i.test(String(u))).slice(0, 20);
+  if (!urls.length) return [];
+  const reqs = urls.map((u) => {
+    const yt = /(^|\.)(youtube\.com|youtu\.be)$/i.test(hostOf(u));
+    return {
+      url: yt ? 'https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(u) : u,
+      muteHttpExceptions: true, followRedirects: true, validateHttpsCertificates: true,
+      headers: { 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.6' },
+    };
+  });
+  let res = [];
+  try { res = UrlFetchApp.fetchAll(reqs); } catch (err) { res = []; }
+  return urls.map((u, i) => {
+    const r = res[i];
+    const out = { url: u, title: '', desc: '' };
+    if (!r || r.getResponseCode() >= 400) return out;
+    let text = '';
+    try { text = r.getContentText(); } catch (err) { return out; }
+    if (reqs[i].url !== u) {                                  // YouTube oEmbed
+      try { const j = JSON.parse(text); out.title = j.title || ''; out.desc = j.author_name || ''; } catch (err) {}
+      return out;
+    }
+    const head = text.slice(0, 300000);
+    const meta = (name) => {
+      const re1 = new RegExp('<meta[^>]+(?:property|name)=["\']' + name + '["\'][^>]*content=["\']([^"\']*)', 'i');
+      const re2 = new RegExp('<meta[^>]+content=["\']([^"\']*)["\'][^>]*(?:property|name)=["\']' + name + '["\']', 'i');
+      const m = head.match(re1) || head.match(re2);
+      return m ? decodeEntities(m[1]).trim() : '';
+    };
+    const t = head.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    let title = meta('og:title') || meta('twitter:title') || (t ? decodeEntities(t[1]).trim() : '');
+    let desc = meta('og:description') || meta('description') || meta('twitter:description');
+    if (META_GENERIC.test(title)) title = '';
+    if (META_GENERIC.test(desc) || /log in|登入|sign up/i.test(desc) && !title) desc = '';
+    out.title = title.replace(/\s+/g, ' ').slice(0, 200);
+    out.desc = desc.replace(/\s+/g, ' ').slice(0, 300);
+    return out;
+  });
+}
+
+function hostOf(u) {
+  const m = String(u).match(/^https?:\/\/([^\/?#:]+)/i);
+  return m ? m[1].toLowerCase() : '';
+}
+
+function decodeEntities(s) {
+  return String(s)
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
+    .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
 }

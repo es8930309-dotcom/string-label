@@ -16,8 +16,22 @@ const CONFIG = {
   // 圖文選單其他按鈕的回覆：左邊是按鈕送出的文字，右邊是機器人回覆的內容（\n 是換行，可以放網址）
   REPLIES: {
     '臨打團': '🏸 臨打團\n📅 時間：（請填寫）\n📍 地點：（請填寫）\n💰 費用：（請填寫）\n✍️ 報名方式：（請填寫）',
-    '羽技非凡教學': '🏸 羽技非凡教學\n📚 課程內容：（請填寫）\n📅 上課時間：（請填寫）\n💰 費用：（請填寫）\n✍️ 報名方式：（請填寫）',
+    '羽球團課': '🏸 羽球團課\n📚 課程內容：（請填寫）\n📅 上課時間：（請填寫）\n💰 費用：（請填寫）\n✍️ 報名方式：（請填寫）',
+    '個別指導': '🏸 個別指導\n📚 內容：（請填寫）\n📅 時間：預約制（請填寫）\n💰 費用：（請填寫）\n✍️ 預約方式：（請填寫）',
   },
+};
+
+// 圖文選單（用程式建立，才能做出上 2 格、下 3 格的版型）。設定好後執行一次 setupRichMenu()
+const RICH_MENU = {
+  image: 'https://raw.githubusercontent.com/es8930309-dotcom/string-label/main/line-assets/richmenu-jiayou.jpg',
+  // [x, y, 寬, 高, 按下後送出的文字]（圖片大小 2500 × 1686）
+  areas: [
+    [0, 0, 1250, 862, '臨打團'],
+    [1250, 0, 1250, 862, '羽球團課'],
+    [0, 862, 833, 824, '個別指導'],
+    [833, 862, 834, 824, '穿線紀錄'],
+    [1667, 862, 833, 824, '店面在哪'],
+  ],
 };
 
 // ----------------------------------------------------------------------------
@@ -309,6 +323,7 @@ function handleLineEvent(ev) {
 
   switch (text) {
     case MENU.INFO:
+    case '店面在哪':
       reply(ev.replyToken, CONFIG.SHOP_INFO);
       return;
     case MENU.CHANGE:
@@ -376,7 +391,8 @@ function myRackets(cust) {
 function myHistory(cust) {
   const list = table(SHEET_RECORDS, R_HEAD).rows.filter((r) => r['手機'] === cust['手機']).reverse().slice(0, 10);
   if (!list.length) return '還沒有穿線紀錄喔。';
-  return '📋 最近的穿線紀錄\n\n' + list.map((r) => `${shortDate(r['收拍日期'])}　${recordLine(r)}`).join('\n');
+  return '📋 最近的穿線紀錄\n\n' + list.map((r) =>
+    `${shortDate(r['收拍日期'])}　${recordLine(r)}　${r['狀態'] === ST.DOING ? '⏳穿線中' : '✅完成'}`).join('\n');
 }
 
 // ---------- label app API ----------
@@ -549,4 +565,35 @@ function decodeEntities(s) {
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
     .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+}
+
+// ---------- rich menu ----------
+/** 建立圖文選單並設成所有好友的預設選單（執行一次就好；換圖片或按鈕後再執行一次） */
+function setupRichMenu() {
+  const old = (lineApi('richmenu/list', null, 'get').richmenus || []).map((m) => m.richMenuId);
+  const id = lineApi('richmenu', {
+    size: { width: 2500, height: 1686 },
+    selected: true,
+    name: CONFIG.SHOP_NAME + ' 選單',
+    chatBarText: '選單',
+    areas: RICH_MENU.areas.map(([x, y, width, height, text]) => ({
+      bounds: { x, y, width, height },
+      action: { type: 'message', label: text, text },
+    })),
+  }).richMenuId;
+
+  const img = UrlFetchApp.fetch(RICH_MENU.image, { muteHttpExceptions: true });
+  if (img.getResponseCode() !== 200) throw new Error('下載選單圖片失敗：' + img.getResponseCode());
+  const up = UrlFetchApp.fetch('https://api-data.line.me/v2/bot/richmenu/' + id + '/content', {
+    method: 'post',
+    contentType: 'image/jpeg',
+    headers: { Authorization: 'Bearer ' + CONFIG.LINE_TOKEN },
+    payload: img.getBlob().getBytes(),
+    muteHttpExceptions: true,
+  });
+  if (up.getResponseCode() >= 300) throw new Error('上傳選單圖片失敗：' + up.getContentText());
+
+  lineApi('user/all/richmenu/' + id, null, 'post');
+  old.forEach((o) => { try { lineApi('richmenu/' + o, null, 'delete'); } catch (err) {} });
+  console.log('圖文選單設定完成：' + id);
 }

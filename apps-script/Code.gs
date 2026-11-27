@@ -22,21 +22,21 @@ const CONFIG = {
   // 訊息裡「有出現」左邊的字，就回覆右邊的內容（客人不用打得一字不差）
   KEYWORDS: {
     '羽技非凡': '🏸 羽技非凡教學\n課程介紹請看這裡 👇\nhttps://docs.google.com/document/d/12lt9tbdDTZVRmn1v_Ls2KL1tRTtnQpcpJK8Avu9tQB0/edit?usp=drive_link',
+    '我想學球': '🏸 羽技非凡教學\n課程介紹請看這裡 👇\nhttps://docs.google.com/document/d/12lt9tbdDTZVRmn1v_Ls2KL1tRTtnQpcpJK8Avu9tQB0/edit?usp=drive_link',
   },
   // 訊息裡有出現這些字，就回覆客人的穿線紀錄（例如「我想穿線」）
   HISTORY_WORDS: ['穿線'],
 };
 
-// 圖文選單（用程式建立，才能做出上 2 格、下 3 格的版型）。設定好後執行一次 setupRichMenu()
+// 圖文選單（四格）。換圖片或按鈕後，執行一次 setupRichMenu()
 const RICH_MENU = {
-  image: 'https://raw.githubusercontent.com/es8930309-dotcom/string-label/main/line-assets/richmenu-jiayou.jpg',
-  // [x, y, 寬, 高, 按下後送出的文字]（圖片大小 2500 × 1686）
+  image: 'https://raw.githubusercontent.com/es8930309-dotcom/string-label/main/line-assets/richmenu-4.jpg',
+  // [x, y, 寬, 高, 按下後送出的文字]（圖片大小 2500 × 1686，四格）
   areas: [
-    [0, 0, 1250, 862, '臨打團'],
-    [1250, 0, 1250, 862, '羽球團課'],
-    [0, 862, 833, 824, '個別指導'],
-    [833, 862, 834, 824, '穿線紀錄'],
-    [1667, 862, 833, 824, '店面在哪'],
+    [0, 0, 1250, 843, '臨打團'],
+    [1250, 0, 1250, 843, '穿線紀錄'],
+    [0, 843, 1250, 843, '我想學球'],
+    [1250, 843, 1250, 843, '店面在哪'],
   ],
 };
 

@@ -19,6 +19,12 @@ const CONFIG = {
     '羽球團課': '🏸 羽球團課\n📚 課程內容：（請填寫）\n📅 上課時間：（請填寫）\n💰 費用：（請填寫）\n✍️ 報名方式：（請填寫）',
     '個別指導': '🏸 個別指導\n📚 內容：（請填寫）\n📅 時間：預約制（請填寫）\n💰 費用：（請填寫）\n✍️ 預約方式：（請填寫）',
   },
+  // 訊息裡「有出現」左邊的字，就回覆右邊的內容（客人不用打得一字不差）
+  KEYWORDS: {
+    '羽技非凡': '🏸 羽技非凡教學\n課程介紹請看這裡 👇\nhttps://docs.google.com/document/d/12lt9tbdDTZVRmn1v_Ls2KL1tRTtnQpcpJK8Avu9tQB0/edit?usp=drive_link',
+  },
+  // 訊息裡有出現這些字，就回覆客人的穿線紀錄（例如「我想穿線」）
+  HISTORY_WORDS: ['穿線'],
 };
 
 // 圖文選單（用程式建立，才能做出上 2 格、下 3 格的版型）。設定好後執行一次 setupRichMenu()
@@ -336,6 +342,18 @@ function handleLineEvent(ev) {
     case MENU.HISTORY:
       reply(ev.replyToken, cust ? myHistory(cust) : ASK_PHONE);
       return;
+  }
+
+  // contains-match keywords, e.g. 「羽技非凡」
+  const kw = Object.keys(CONFIG.KEYWORDS || {}).find((k) => text.indexOf(k) >= 0);
+  if (kw) {
+    reply(ev.replyToken, CONFIG.KEYWORDS[kw]);
+    return;
+  }
+  // e.g. 「我想穿線」 → stringing history
+  if ((CONFIG.HISTORY_WORDS || []).some((w) => text.indexOf(w) >= 0)) {
+    reply(ev.replyToken, cust ? myHistory(cust) : ASK_PHONE);
+    return;
   }
 
   if (!cust) {
